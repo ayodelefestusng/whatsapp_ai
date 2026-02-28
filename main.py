@@ -114,13 +114,26 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
         # Initialize new user
         user = UserState(phone_number=phone_number, state="start", step="intro", temp_data="")
         db.add(user)
+        response_text = "E nle o! (Hello!) I am your AI assistant. How can I help you today?"
     else:
         # Update existing state - Example: transition to leave_application
-        user.state = "leave_application" 
-        user.temp_data = message
-    
+        # user.state = "leave_application" 
+        # user.temp_data = message
+        # Logic to switch to leave_application
+        if "leave" in message.lower() or "permission" in message.lower():
+            user.state = "leave_application"
+            user.step = "asking_reason"
+            response_text = "I see you're asking about leave. What is the reason for your application?"
+        else:
+            # Default AI response
+            response_text = f"I received your message: '{message}'. How can I help with your work today?"
+
+
     db.commit()
     db.refresh(user)
+    
+    
+
 
     # 2. Redis Caching
     redis_client.set(f"user:{phone_number}:last_message", message, ex=3600) # Expire in 1hr
@@ -136,3 +149,12 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
         "state": user.state,
         "evolution_result": send_result
     }
+    
+    
+    
+    
+    
+# Inside your whatsapp_webhook function:
+
+# 1. State Management logic
+

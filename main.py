@@ -38,9 +38,15 @@ ollama_client = Client(
     host='https://ollama.com',
     headers={'Authorization': f'Bearer {OLLAMA_API_KEY}'}
 )
-loghger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# loghger = logging.getLogger(__name__)
+# logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 # --- 3. Database Model ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+logger = logging.getLogger("whatsapp_webhook")
+
 class UserState(Base):
     __tablename__ = "user_states"
     id = Column(Integer, primary_key=True, index=True)
@@ -89,9 +95,9 @@ app = FastAPI(title="ATB AI WhatsApp Integration")
 @app.post("/webhook")
 async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
     # Data Extraction
-    logging.info(f"Received webhook: {payload}")
+    logger.info(f"Received webhook: {payload}")
     if payload.data:
-        logging.info("Extracting data from payload.data")
+        logger.info("Extracting data from payload.data")
         data = payload.data
         msg_obj = data.get("message", {})
         message_content = msg_obj.get("conversation") or \
@@ -99,12 +105,12 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
         remote_jid = data.get("key", {}).get("remoteJid", "")
         phone_number = remote_jid.split("@")[0]
     else:
-        logging.info("Extracting data from payload fields")
+        logger.info("Extracting data from payload fields")
         phone_number = payload.phone_number
         message_content = payload.message
 
     if not message_content or not phone_number:
-        logging.warning("Missing message content or phone number")
+        logger.warning("Missing message content or phone number")
         return {"status": "ignored", "reason": "Missing data"}
 
     message = message_content.strip()
@@ -140,15 +146,15 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
 
     # Final Action
     await send_whatsapp_message(phone_number, response_text)
-    logging.info(f"Sent response to {phone_number}: {response_text}")
+    logger.info(f"Sent response to {phone_number}: {response_text}")
     return {"status": "processed", "state": user.state}
     
 @app.get("/")
 async def root():
-    logging.info("Health check endpoint hit")
+    logger.info("Health check endpoint hit")
     return {"status": "online", "database": "connected"}
 
 @app.get("/utility/")
 def utility_root():
-    logging.info("Utility endpoint hit")
+    logger.info("Utility endpoint hit")
     return {"message": "Hello from ATB AI!"}

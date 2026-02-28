@@ -75,7 +75,7 @@ import requests
 
 EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://whatsapp-1_evolution-api:8080")
 EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
-
+EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE", "myinstance")
 def send_whatsapp_message(number: str, text: str):
     url = f"{EVOLUTION_API_URL}/message/send"
     headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}

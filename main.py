@@ -45,7 +45,7 @@ async def root():
 def read_root():
     return {"message": "Hello from ATB AI!"}
 
-@app.get("/ayodele/")
+@app.get("/ayodeles/")
 def read_roots():
     return {"message": "Atm ATB AI!"}
 # Dependency for DB session

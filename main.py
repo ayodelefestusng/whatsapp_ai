@@ -20,7 +20,12 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
- 
+from pydantic import BaseModel
+
+class WebhookPayload(BaseModel):
+    phone_number: str
+    message: str
+
 
 
 class UserState(Base):
@@ -68,12 +73,11 @@ def get_db():
         db.close()
 
 @app.post("/webhook")
-async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
-    payload = await request.json()
-    phone_number = payload.get("phone_number")
-    message = payload.get("message")
+async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
+    phone_number = payload.phone_number
+    message = payload.message
 
-    # Example: store state in Postgres
+    # Store state in Postgres
     user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
     if not user:
         user = UserState(phone_number=phone_number, state="new", step="start", temp_data="")
@@ -81,12 +85,18 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(user)
 
-    # Example: cache last message in Redis
+    # Cache last message in Redis
     redis_client.set(f"user:{phone_number}:last_message", message)
+
     # Generate AI response using Ollama Cloud
-    messages = [ {"role": "user", "content": message} ]
+    messages = [{"role": "user", "content": message}]
     response_text = ""
     for part in client.chat(OLLAMA_CLOUD_MODEL, messages=messages, stream=True):
         response_text += part['message']['content']
 
-    return { "status": "received", "phone_number": phone_number, "message": message, "ai_response": response_text }
+    return {
+        "status": "received",
+        "phone_number": phone_number,
+        "message": message,
+        "ai_response": response_text
+    }

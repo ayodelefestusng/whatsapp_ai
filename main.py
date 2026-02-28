@@ -107,52 +107,59 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
 
     logger.info(f"Incoming: {phone_number} -> {message}")
 
-    # 1. State Management
+    # 1. State Management & State Retrieval
     user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
     
     if not user:
-        # Initialize new user
         user = UserState(phone_number=phone_number, state="start", step="intro", temp_data="")
         db.add(user)
-        response_text = "E nle o! (Hello!) I am your AI assistant. How can I help you today?"
+        db.commit()
+        db.refresh(user)
+
+    # 2. Determine Logic Path (State Switcher)
+    if "leave" in message.lower() or "permission" in message.lower():
+        user.state = "leave_application"
+        user.step = "asking_reason"
+        db.commit()
+
+    # 3. Generate AI Response via Ollama
+    # Construct a prompt based on the user's current state
+    system_prompt = (
+        "You are a helpful HR Assistant for ATB AI. "
+        f"The user's current state is: {user.state}. "
+    )
+    
+    if user.state == "leave_application":
+        system_prompt += "Help the user complete their leave application. Ask for reason, start date, and end date if missing."
     else:
-        # Update existing state - Example: transition to leave_application
-        # user.state = "leave_application" 
-        # user.temp_data = message
-        # Logic to switch to leave_application
-        if "leave" in message.lower() or "permission" in message.lower():
-            user.state = "leave_application"
-            user.step = "asking_reason"
-            response_text = "I see you're asking about leave. What is the reason for your application?"
-        else:
-            # Default AI response
-            response_text = f"I received your message: '{message}'. How can I help with your work today?"
+        system_prompt += "Answer general questions politely. Keep responses concise for WhatsApp."
 
+    try:
+        # Calling the Ollama Cloud Client
+        response = ollama_client.chat(
+            model=OLLAMA_CLOUD_MODEL,
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': message},
+            ]
+        )
+        response_text = response['message']['content']
+    except Exception as e:
+        logger.error(f"Ollama Error: {str(e)}")
+        response_text = "I'm having a bit of trouble processing that right now. Could you try again in a moment?"
 
-    db.commit()
-    db.refresh(user)
-    
-    
+    # 4. Redis Caching (Store history for context if needed later)
+    redis_client.set(f"user:{phone_number}:last_message", message, ex=3600)
 
-
-    # 2. Redis Caching
-    redis_client.set(f"user:{phone_number}:last_message", message, ex=3600) # Expire in 1hr
-
-    # 3. AI Response (Placeholder for Ollama Logic)
-    response_text = f"Received your message for your {user.state}: {message}"
-
-    # 4. Evolution API Send
+    # 5. Evolution API Send
     send_result = await send_whatsapp_message(phone_number, response_text)
 
     return {
         "status": "processed",
         "state": user.state,
+        "ai_response": response_text,
         "evolution_result": send_result
     }
-    
-    
-    
-    
     
 # Inside your whatsapp_webhook function:
 

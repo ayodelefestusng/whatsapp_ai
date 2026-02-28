@@ -71,6 +71,17 @@ def get_db():
         yield db
     finally:
         db.close()
+import requests
+
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://whatsapp-1_evolution-api:8080")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
+
+def send_whatsapp_message(number: str, text: str):
+    url = f"{EVOLUTION_API_URL}/message/send"
+    headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}
+    payload = {"number": number, "text": text}
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 
 @app.post("/webhook")
 async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
@@ -94,9 +105,13 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
     for part in client.chat(OLLAMA_CLOUD_MODEL, messages=messages, stream=True):
         response_text += part['message']['content']
 
+    # Send reply back to WhatsApp via Evolution API
+    send_result = send_whatsapp_message(phone_number, response_text)
+
     return {
         "status": "received",
         "phone_number": phone_number,
         "message": message,
-        "ai_response": response_text
+        "ai_response": response_text,
+        "evolution_result": send_result
     }

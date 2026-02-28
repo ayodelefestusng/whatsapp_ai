@@ -4,8 +4,11 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 import os
 from dotenv import load_dotenv
 import redis
-
+from ollama import Client
 load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db") 
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY") 
+OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 
@@ -33,6 +36,14 @@ Base.metadata.create_all(bind=engine)
 # --- Redis Setup ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://default:65f11924ebc7c9e25051@whatsapp-1_evolution-api-redis:6379")
 redis_client = redis.Redis.from_url(REDIS_URL)
+# Ollama client setup 
+
+client = Client(
+    host='https://ollama.com',
+headers={'Authorization': f'Bearer {OLLAMA_API_KEY}'}
+)
+
+
 
 # --- FastAPI App ---
 app = FastAPI()
@@ -72,5 +83,10 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
 
     # Example: cache last message in Redis
     redis_client.set(f"user:{phone_number}:last_message", message)
+    # Generate AI response using Ollama Cloud
+    messages = [ {"role": "user", "content": message} ]
+    response_text = ""
+    for part in client.chat(OLLAMA_CLOUD_MODEL, messages=messages, stream=True):
+        response_text += part['message']['content']
 
-    return {"status": "received", "phone_number": phone_number, "message": message}
+    return { "status": "received", "phone_number": phone_number, "message": message, "ai_response": response_text }

@@ -9,30 +9,28 @@ from sqlalchemy.orm import sessionmaker, declarative_base, Session
 from pydantic import BaseModel
 from ollama import Client
 
-# --- 1. Load Environment & Configuration ---
 load_dotenv()
 
-# Logging Setup
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-)
-logger = logging.getLogger("whatsapp_webhook")
-
-# Environment Variables
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
+# --- Configuration ---
+DATABASE_URL = os.getenv("DATABASE_URL")
+# Force the correct driver for SQLAlchemy 2.0 + Python 3.13
 if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+elif DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://default:65f11924ebc7c9e25051@whatsapp-1_evolution-api-redis:6379")
-EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "https://whatsapp-1-evolution-api.xqqhik.easypanel.host")
-EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY", "429683C4C977415CAAFCCE10F7D57E11")
-EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE", "session1")
+# Ensure Redis uses the Public IP if running locally
+REDIS_URL = os.getenv("REDIS_URL") 
+
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
+EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE")
 OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY")
-OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
+OLLAMA_CLOUD_MODEL = os.getenv("OLLAMA_CLOUD_MODEL")
 
-# --- 2. Database & Redis Setup ---
-engine = create_engine(DATABASE_URL)
+# --- Database & Redis Setup ---
+# Added connect_args to help with timeout issues
+engine = create_engine(DATABASE_URL, connect_args={"connect_timeout": 10})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -42,22 +40,33 @@ ollama_client = Client(
     headers={'Authorization': f'Bearer {OLLAMA_API_KEY}'}
 )
 
-# --- 3. Models ---
+# --- Models ---
 class UserState(Base):
     __tablename__ = "user_states"
     id = Column(Integer, primary_key=True, index=True)
     phone_number = Column(String(20), unique=True, index=True)
-    state = Column(String(50)) # Use 'leave_application' here when active
+    state = Column(String(50)) 
     step = Column(String(50))
     temp_data = Column(Text)
 
-Base.metadata.create_all(bind=engine)
+# Create tables
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"⚠️ Could not create tables: {e}. Check if port 5432 is exposed!")
+
+from typing import Optional
 
 class WebhookPayload(BaseModel):
-    phone_number: str
-    message: str
+    # For your manual tests
+    phone_number: Optional[str] = None
+    message: Optional[str] = None
+    
+    # For the real Evolution API
+    event: Optional[str] = None
+    instance: Optional[str] = None
+    data: Optional[dict] = None
 
-# --- 4. Dependencies ---
 def get_db():
     db = SessionLocal()
     try:
@@ -65,103 +74,84 @@ def get_db():
     finally:
         db.close()
 
-# --- 5. FastAPI App & Routes ---
 app = FastAPI(title="ATB AI WhatsApp Integration")
-
 @app.get("/")
 async def root():
+    logging.info("Health check endpoint hit")
     return {"status": "online", "database": "connected"}
 
 @app.get("/utility/")
 def utility_root():
+    logging.info("Utility endpoint hit")
     return {"message": "Hello from ATB AI!"}
 
-# --- 6. Helper Functions ---
-async def send_whatsapp_message(phone_number: str, text: str):
-    """Sends a message via Evolution API using verified connection settings."""
-    # Note: We use the URL structure verified in your terminal test
-    url = f"{EVOLUTION_API_URL}/message/sendText/{EVOLUTION_INSTANCE}"
-    headers = {
-        "apikey": EVOLUTION_API_KEY,
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "number": phone_number,
-        "text": text
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Error sending message: {e.response.text}")
-            return {"error": str(e), "details": e.response.text}
-
-# --- 7. Webhook Logic ---
+# --- Webhook Logic ---
 @app.post("/webhook")
 async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
-    phone_number = payload.phone_number
-    message = payload.message
+    # --- SMART DATA EXTRACTION ---
+    if payload.data:
+        # It's a real Evolution API request
+        data = payload.data
+        message_content = data.get("message", {}).get("conversation") or \
+                          data.get("message", {}).get("extendedTextMessage", {}).get("text")
+        
+        remote_jid = data.get("key", {}).get("remoteJid", "")
+        phone_number = remote_jid.split("@")[0]
+    else:
+        # It's your manual PowerShell/Postman test
+        phone_number = payload.phone_number
+        message_content = payload.message
 
-    logger.info(f"Incoming: {phone_number} -> {message}")
+    # Stop if we still don't have the basics
+    if not message_content or not phone_number:
+        logging.warning("Webhook received but couldn't find phone or message.")
+        return {"status": "ignored", "reason": "Missing data"}
 
-    # 1. State Management & State Retrieval
-    user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
+    message = message_content.strip()
+    # ------------------------------
+
+    logging.info(f"Processing: {phone_number} -> {message}")
     
+    # ... Rest of your State Management (leave_application) and Ollama logic ...
+
+    # 1. State Management
+    user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
     if not user:
         user = UserState(phone_number=phone_number, state="start", step="intro", temp_data="")
         db.add(user)
         db.commit()
         db.refresh(user)
 
-    # 2. Determine Logic Path (State Switcher)
-    if "leave" in message.lower() or "permission" in message.lower():
+    # 2. State Transition: leave_application
+    if any(word in message.lower() for word in ["leave", "permission", "sick"]):
         user.state = "leave_application"
-        user.step = "asking_reason"
+        user.step = "asking_details"
         db.commit()
 
-    # 3. Generate AI Response via Ollama
-    # Construct a prompt based on the user's current state
-    system_prompt = (
-        "You are a helpful HR Assistant for ATB AI. "
-        f"The user's current state is: {user.state}. "
-    )
-    
+    # 3. AI Response
+    system_prompt = f"You are an HR Assistant. User State: {user.state}. "
     if user.state == "leave_application":
-        system_prompt += "Help the user complete their leave application. Ask for reason, start date, and end date if missing."
+        system_prompt += "Ask for the leave reason and the start/end dates."
     else:
-        system_prompt += "Answer general questions politely. Keep responses concise for WhatsApp."
+        system_prompt += "Answer work questions concisely."
 
     try:
-        # Calling the Ollama Cloud Client
         response = ollama_client.chat(
             model=OLLAMA_CLOUD_MODEL,
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': message},
-            ]
+            messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': message}]
         )
         response_text = response['message']['content']
-    except Exception as e:
-        logger.error(f"Ollama Error: {str(e)}")
-        response_text = "I'm having a bit of trouble processing that right now. Could you try again in a moment?"
+    except Exception:
+        response_text = "E pele, I'm having trouble connecting to my brain. Try again soon!"
 
-    # 4. Redis Caching (Store history for context if needed later)
-    redis_client.set(f"user:{phone_number}:last_message", message, ex=3600)
+    # 4. Send Result
+    await send_whatsapp_message(phone_number, response_text)
 
-    # 5. Evolution API Send
-    send_result = await send_whatsapp_message(phone_number, response_text)
+    return {"status": "processed", "state": user.state}
 
-    return {
-        "status": "processed",
-        "state": user.state,
-        "ai_response": response_text,
-        "evolution_result": send_result
-    }
-    
-# Inside your whatsapp_webhook function:
-
-# 1. State Management logic
-
+async def send_whatsapp_message(phone_number: str, text: str):
+    url = f"{EVOLUTION_API_URL}/message/sendText/{EVOLUTION_INSTANCE}"
+    headers = {"apikey": EVOLUTION_API_KEY, "Content-Type": "application/json"}
+    payload = {"number": phone_number, "text": text}
+    async with httpx.AsyncClient() as client:
+        return await client.post(url, json=payload, headers=headers)

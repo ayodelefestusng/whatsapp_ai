@@ -11,7 +11,7 @@ pytest==8.1.1
 pytest-asyncio==0.23.6
 alembic==1.13.1
 psycopg2-binary==2.9.9
-
+ollama
 # requests
 # sqlalchemy
 # python-dotenv

@@ -83,10 +83,53 @@ def send_whatsapp_message(number: str, text: str):
     response = requests.post(url, json=payload, headers=headers)
     return response.json()
 
+# @app.post("/webhook")
+# async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
+#     phone_number = payload.phone_number
+#     message = payload.message
+
+#     # Store state in Postgres
+#     user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
+#     if not user:
+#         user = UserState(phone_number=phone_number, state="new", step="start", temp_data="")
+#         db.add(user)
+#         db.commit()
+#         db.refresh(user)
+
+#     # Cache last message in Redis
+#     redis_client.set(f"user:{phone_number}:last_message", message)
+
+#     # Generate AI response using Ollama Cloud
+#     messages = [{"role": "user", "content": message}]
+#     response_text = ""
+#     for part in client.chat(OLLAMA_CLOUD_MODEL, messages=messages, stream=True):
+#         response_text += part['message']['content']
+
+#     # Send reply back to WhatsApp via Evolution API
+#     send_result = send_whatsapp_message(phone_number, response_text)
+
+#     return {
+#         "status": "received",
+#         "phone_number": phone_number,
+#         "message": message,
+#         "ai_response": response_text,
+#         "evolution_result": send_result
+#     }
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # You can set DEBUG for more detail
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+)
+
+logger = logging.getLogger("whatsapp_webhook")
 @app.post("/webhook")
 async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db)):
     phone_number = payload.phone_number
     message = payload.message
+
+    logger.info(f"Webhook received: phone_number={phone_number}, message={message}")
 
     # Store state in Postgres
     user = db.query(UserState).filter(UserState.phone_number == phone_number).first()
@@ -95,18 +138,22 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
         db.add(user)
         db.commit()
         db.refresh(user)
+        logger.info(f"New user state created for {phone_number}")
 
     # Cache last message in Redis
     redis_client.set(f"user:{phone_number}:last_message", message)
+    logger.debug(f"Cached last message for {phone_number}")
 
     # Generate AI response using Ollama Cloud
     messages = [{"role": "user", "content": message}]
     response_text = ""
     for part in client.chat(OLLAMA_CLOUD_MODEL, messages=messages, stream=True):
         response_text += part['message']['content']
+    logger.info(f"AI response generated for {phone_number}: {response_text[:100]}...")
 
     # Send reply back to WhatsApp via Evolution API
     send_result = send_whatsapp_message(phone_number, response_text)
+    logger.info(f"Message sent to {phone_number}, result={send_result}")
 
     return {
         "status": "received",

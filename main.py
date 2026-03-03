@@ -131,44 +131,48 @@ async def whatsapp_webhook(payload: WebhookPayload, db: Session = Depends(get_db
         db.commit()
 
     # AI Response Logic
-    # system_prompt = f"You are an HR Assistant for Dignity AI. Current User State: {user.state}. Username {user_name}"
-    # if user.state == "leave_application":
-    #     system_prompt += " Be helpful. Ask the user for their leave reason and dates."
-
-    # try:
-    #     response = ollama_client.chat(
-    #         model=OLLAMA_CLOUD_MODEL,
-    #         messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': message}]
-    #     )
-    #     logging.info(f"AI response: {response}")
-    #     response_text = response['message']['content']
-    # except Exception:
-    #     response_text = "Oh Sorry, I'm having trouble connecting to the system. Try again soon!"
-    base_prompt = f"You are an HR Assistant for Dignity AI. Current User State: {user.state}. Username {user_name}"
-    prompts = {
-        "leave_application": " Be helpful. Ask the user for their leave reason and dates."
-    }
-    system_prompt = base_prompt + prompts.get(user.state, "")
+    system_prompt = f"You are an HR Assistant for Dignity AI. Current User State: {user.state}. Username {user_name}"
+    if user.state == "leave_application":
+        system_prompt += " Be helpful. Ask the user for their leave reason and dates."
 
     try:
         response = ollama_client.chat(
             model=OLLAMA_CLOUD_MODEL,
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': message}
-            ]
+            messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': message}]
         )
         logging.info(f"AI response: {response}")
-        response_text = response.get('message', {}).get('content', "No response content available.")
-    except Exception as e:
-        logging.error(f"Error connecting to Ollama: {e}")
-        response_text = "Oh sorry, I'm having trouble connecting to the system. Try again soon!"
-        
-        # Final Action
-        await send_whatsapp_message(phone_number, response_text)
-        logger.info(f"Sent response to {phone_number}: {response_text}")
-        return {"status": "processed", "state": user.state}
-        
+        response_text = response['message']['content']
+    except Exception:
+        response_text = "Oh Sorry, I'm having trouble connecting to the system. Try again soon!"
+
+    
+    
+    # base_prompt = f"You are an HR Assistant for Dignity AI. Current User State: {user.state}. Username {user_name}"
+    # prompts = {
+    #     "leave_application": " Be helpful. Ask the user for their leave reason and dates."
+    # }
+    # system_prompt = base_prompt + prompts.get(user.state, "")
+
+    # try:
+    #     response = ollama_client.chat(
+    #         model=OLLAMA_CLOUD_MODEL,
+    #         messages=[
+    #             {'role': 'system', 'content': system_prompt},
+    #             {'role': 'user', 'content': message}
+    #         ]
+    #     )
+    #     logging.info(f"AI response: {response}")
+    #     response_text = response.get('message', {}).get('content', "No response content available.")
+    # except Exception as e:
+    #     logging.error(f"Error connecting to Ollama: {e}")
+    #     response_text = "Oh sorry, I'm having trouble connecting to the system. Try again soon!"
+    
+    
+    # Final Action
+    await send_whatsapp_message(phone_number, response_text)
+    logger.info(f"Sent response to {phone_number}: {response_text}")
+    return {"status": "processed", "state": user.state}
+    
 @app.get("/")
 async def root():
     logger.info("Health check endpoint hit")

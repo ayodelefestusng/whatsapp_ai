@@ -10,7 +10,15 @@ pytest==8.1.1
 pytest-asyncio==0.23.6
 alembic==1.13.1
 ollama
-
+langgraph
+langchain
+langchain-community
+langchain-text-splitters 
+langchain-tavily
+langchain-google-genai
+langgraph-checkpoint-postgres
+python-dateutil
+pandas
 # requests
 # sqlalchemy
 # python-dotenv

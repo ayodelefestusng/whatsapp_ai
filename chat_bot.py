@@ -201,18 +201,133 @@ def get_embeddings():
         embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=api_key)
     return embeddings
 
+# ---------------------------------------------------------------------------
+# FAS Vector Store service URLs
+# The Django service at this URL hosts the tenant's document corpus.
+# Set VECTOR_STORE_LOCAL=true in .env to use localhost instead (for local dev).
+# Override URLs via VECTOR_STORE_URL / VECTOR_STORE_LOCAL_URL env vars.
+# ---------------------------------------------------------------------------
+_FAS_REMOTE_URL = os.getenv(
+    "VECTOR_STORE_URL",
+    "http://147.182.194.8:3000/projects/whatsapp-1/app/vectra_app"
+)
+_FAS_LOCAL_URL = os.getenv(
+    "VECTOR_STORE_LOCAL_URL",
+    "http://localhost:3000/projects/whatsapp-1/app/vectra_app"
+)
+_USE_LOCAL_VECTOR = os.getenv("VECTOR_STORE_LOCAL", "false").lower() == "true"
+_VECTOR_STORE_TIMEOUT = int(os.getenv("VECTOR_STORE_TIMEOUT", "10"))
+
+
+def _fetch_docs_from_fas(tenant_id: str) -> list:
+    """
+    Try to fetch documents from the FAS Django service.
+    Expects JSON: {"documents": [{"page_content": "...", "metadata": {...}}, ...]}
+
+    Tries the remote URL first (unless VECTOR_STORE_LOCAL=true), then localhost.
+    Returns a list of LangChain Document objects, or [] on any failure.
+    """
+    from langchain_core.documents import Document as LCDoc
+
+    urls = []
+    if not _USE_LOCAL_VECTOR:
+        urls.append((_FAS_REMOTE_URL, "REMOTE"))
+    urls.append((_FAS_LOCAL_URL, "LOCAL"))
+
+    for url, label in urls:
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Trying {label} FAS at {url}")
+        try:
+            resp = requests.get(url, params={"tenant_id": tenant_id}, timeout=_VECTOR_STORE_TIMEOUT)
+            resp.raise_for_status()
+            raw_docs = resp.json().get("documents", [])
+
+            if not isinstance(raw_docs, list):
+                logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: 'documents' is not a list.")
+                continue
+
+            docs = [
+                LCDoc(page_content=d["page_content"], metadata=d.get("metadata", {}))
+                for d in raw_docs
+                if isinstance(d, dict) and d.get("page_content")
+            ]
+            logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: fetched {len(docs)} docs.")
+            return docs
+
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: connection refused at {url}.")
+        except requests.exceptions.Timeout:
+            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: timed out after {_VECTOR_STORE_TIMEOUT}s.")
+        except requests.exceptions.HTTPError as e:
+            status = e.response.status_code if e.response is not None else "?"
+            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: HTTP {status} — {e}.")
+        except Exception as e:
+            logger.error(f"[VectorStore | Tenant: {tenant_id}] {label}: unexpected error — {e}.")
+
+    logger.warning(f"[VectorStore | Tenant: {tenant_id}] All FAS endpoints failed.")
+    return []
+
+
 def initialize_vector_store(tenant_id: str):
+    """
+    Fetch and return a FAISS vector store for the given tenant.
+    FastAPI is read-only — it never creates or saves a vector store.
+
+    Resolution order:
+      1. Fetch documents from remote Django FAS service → build in-memory FAISS.
+      2. Fetch documents from localhost FAS service (fallback / local dev).
+      3. Load a previously cached FAISS index from disk (faiss_dbs/<tenant_id>/).
+      4. Return (None, info) if everything fails — no empty store is created.
+    """
+    tenant_id = str(tenant_id)
     persist_directory = os.path.join("faiss_dbs", tenant_id)
-    if not os.path.exists(persist_directory):
-        os.makedirs(persist_directory, exist_ok=True)
-    
-    emb = get_embeddings()
+
+    logger.info(f"[VectorStore | Tenant: {tenant_id}] Initializing (read-only).")
+
+    # --- Step 1: Embeddings ---
+    try:
+        emb = get_embeddings()
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Embeddings ready.")
+    except Exception as e:
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] Embeddings init failed: {e}")
+        return None, {"status": "error", "message": f"Embeddings init failed: {e}"}
+
+    # --- Step 2: Try to fetch docs from FAS service (remote → local) ---
+    try:
+        docs = _fetch_docs_from_fas(tenant_id)
+    except Exception as e:
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] _fetch_docs_from_fas raised: {e}")
+        docs = []
+
+    if docs:
+        try:
+            vector_store = FAISS.from_documents(docs, emb)
+            logger.info(f"[VectorStore | Tenant: {tenant_id}] In-memory FAISS built from {len(docs)} FAS docs.")
+            return vector_store, {"status": "success", "source": "fas_service", "doc_count": len(docs)}
+        except Exception as e:
+            logger.error(f"[VectorStore | Tenant: {tenant_id}] Failed to build FAISS from FAS docs: {e}")
+
+    # --- Step 3: Fall back to disk cache (built during a previous session or by Django) ---
     try:
         vector_store = FAISS.load_local(persist_directory, emb, allow_dangerous_deserialization=True)
-        return vector_store, {"status": "success"}
-    except:
-        vector_store = FAISS.from_texts([" "], emb)
-        return vector_store, {"status": "empty"}
+        doc_count = vector_store.index.ntotal if hasattr(vector_store, "index") else "unknown"
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Loaded from disk cache. index_size={doc_count}")
+        return vector_store, {"status": "success", "source": "disk_cache", "doc_count": doc_count}
+    except FileNotFoundError:
+        logger.warning(
+            f"[VectorStore | Tenant: {tenant_id}] No disk cache at {persist_directory} and FAS unavailable. "
+            "pdf_retrieval_tool will be disabled until the Django service is reachable."
+        )
+    except Exception as e:
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] Failed to load disk cache: {e}")
+
+    return None, {"status": "not_found", "message": "FAS service unreachable and no disk cache found."}
+
+
+
+
+
+
+
 
 def get_llm_instance(tenant_id=None):
     """Fetches LLM config using raw SQL."""
@@ -620,7 +735,9 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             "push_name": push_name,
             "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
             "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
-            "tool_intent_map": p_res[2] if p_res else TOOL_INTENT_MAP
+            "tool_intent_map": p_res[2] if p_res else TOOL_INTENT_MAP,
+            # Vector store loaded from disk (built by Django service)
+            "vector_store": tenant_vector_store,
         }
 
     with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:

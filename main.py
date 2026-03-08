@@ -5,9 +5,9 @@ from fastapi import FastAPI, HTTPException, Request, Depends, Form
 from pydantic import BaseModel
 from typing import Optional, Any
 
-from chat.tools import log_debug
-from .database import engine, Base
-from .chat_bot import log_info,log_error, process_message
+from tools import log_debug
+from database import engine, Base
+from chat_bot import log_info,log_error, process_message
 
 # Ensure tables exist (legacy check, though FastAPI doesn't manage them)
 # Base.metadata.create_all(bind=engine)
@@ -43,9 +43,7 @@ async def chatbot_webhook(request: ChatRequest):
         )
         return response
     except Exception as e:
-        
-        log_error("Error in chatbot_webhook: {e}", "tenant_id", "conversation_id")
-
+        log_error(f"Error in chatbot_webhook: {e}", request.tenant_id or "DMC", "postman_session")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/whatsapp_webhook")
@@ -114,7 +112,7 @@ async def whatsapp_webhook(request: Request):
         return response
 
     except Exception as e:
-        logging.error(f"Error in whatsapp_webhook: {e}")
+        log_error(f"Error in whatsapp_webhook: {e}", "unknown", "unknown")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

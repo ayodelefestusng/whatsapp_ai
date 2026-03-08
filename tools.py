@@ -487,11 +487,42 @@ def sql_query_tool(query: str, state: dict) -> dict:
         return {"sql_result": res["messages"][-1].content}
     except Exception as e: return {"sql_result": f"Error: {e}"}
 
-@tool("pdf_retrieval_tool", description="Searches the knowledge base PDFs.")
+@tool("pdf_retrieval_tool", description="Searches the knowledge base for HR policies, procedures, and documents.")
 def pdf_retrieval_tool(query: str, state: dict) -> dict:
-    """Uses FAISS for local semantic search over loaded documents."""
-    # Note: Placeholder for actual vector store logic in chat_bot.py
-    return {"pdf_content": "Knowledge base search logic is being refactored to support remote indexes."}
+    """Uses the tenant FAISS vector store (loaded by Django) to do semantic search over documents."""
+    tenant_id = (state.get("tenant_config") or {}).get("tenant_id", "unknown")
+    conversation_id = "tool"
+
+    try:
+        tenant_config = state.get("tenant_config") or {}
+        vector_store = tenant_config.get("vector_store")
+
+        if vector_store is None:
+            log_warning(
+                "pdf_retrieval_tool: No vector store in state. "
+                "Ensure initialize_vector_store ran and the Django service built the index.",
+                tenant_id, conversation_id
+            )
+            return {"pdf_content": "Knowledge base is not available. Vector store not loaded."}
+
+        log_info(f"pdf_retrieval_tool: Searching for '{query}'", tenant_id, conversation_id)
+        results = vector_store.similarity_search(query, k=4)
+
+        if not results:
+            log_info("pdf_retrieval_tool: No results found.", tenant_id, conversation_id)
+            return {"pdf_content": "No relevant documents found in the knowledge base."}
+
+        # Combine top-k chunks into a single context string
+        combined = "\n\n---\n\n".join(
+            f"[Source: {doc.metadata.get('source', 'document')}]\n{doc.page_content}"
+            for doc in results
+        )
+        log_info(f"pdf_retrieval_tool: Returned {len(results)} chunks.", tenant_id, conversation_id)
+        return {"pdf_content": combined}
+
+    except Exception as e:
+        log_error(f"pdf_retrieval_tool error: {e}", tenant_id, conversation_id)
+        return {"pdf_content": f"Error searching knowledge base: {e}"}
 
 @tool("web_search_tool")
 def web_search_tool(query: str, state: dict) -> dict:

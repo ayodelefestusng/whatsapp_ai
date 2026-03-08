@@ -30,13 +30,21 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
 
 # Local Imports
-from database import SessionLocal
-from ollama_service import OllamaService
-from base import State, Answer
-from logger_utils import log_info, log_error, log_debug, log_warning, logger
-from llm_handler import get_model
-from tools import tools, init_sql_agent
+from .database import SessionLocal
+from .ollama_service import OllamaService
+from .base import State, Answer
+from .tools import tools, init_sql_agent, TENANT_SQL_AGENTS
 
+load_dotenv()
+
+# Logging setup
+logger = logging.getLogger("HR_AGENT")
+
+def log_info(msg, tenant_id, conversation_id):
+    logger.info(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
+
+def log_error(msg, tenant_id, conversation_id):
+    logger.error(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
 
 # Constants / Fallbacks
 OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
@@ -84,7 +92,6 @@ Your response must be:
 - **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
 - **Structured**: Always return your answer in the following JSON format.
 - **Structured**: use naira sign whne currency us required 
-do not hallucinate, either use the tool or response that you are not sure if unsure 
 
     OPERATING PROTOCOLS:
     
@@ -104,11 +111,9 @@ do not hallucinate, either use the tool or response that you are not sure if uns
     PROTOCOL 3: HR POLICIES & KNOWLEDGE
     - For policy questions, use 'pdf_retrieval_tool' to search HR handbooks.
 
-    PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
+    PROTOCOL 4: DATA ANALYTICS
     - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
-    - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
-    - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
-    - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
+    - Use 'generate_visualization_tool'  when user  asked to 'plot', 'chart', 'graph', or 'visualize'.
 
     PROTOCOL 5: PROFILE UPDATES
     - Use 'update_customer_tool' or 'update_employee_profile_tool'.
@@ -125,14 +130,7 @@ do not hallucinate, either use the tool or response that you are not sure if uns
     - Web Context: {web_content}
     - SQL Result: {sql_result}
     
-
-    Tool Guide:{tool_intent_map}
-    - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
-   
-    ### Available Tools & Required Arguments:
-    {tool_descriptions}
-
-       ### Output Format:
+    ### Output Format:
 You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
 ```json
 {{
@@ -143,14 +141,13 @@ You MUST return ONLY a valid JSON object. Do not include any text outside the JS
 
 
 
-
 # DEFAULT_TOOL_INTENT_MAP = {
 #     "leave_management": {"tools": ["fetch_available_leave_types_tool", "prepare_leave_application_tool"], "triggers": ["leave", "vacation"]},
 #     "data_analysis": {"tools": ["sql_query_tool"], "triggers": ["report", "count", "average"]},
 #     "visualization": {"tools": ["generate_visualization_tool"], "triggers": ["plot", "chart", "graph"]}
 # }
 
-tool_guide = {
+TOOL_INTENT_MAP = {
     "leave_management": {
         "tools": ["fetch_available_leave_types_tool", "prepare_leave_application_tool", 
                   "submit_leave_application_tool", "fetch_leave_status_tool", "calculate_num_of_days_tool"],
@@ -164,9 +161,13 @@ tool_guide = {
         "tools": ["pdf_retrieval_tool"],
         "triggers": ["policy", "handbook", "benefits", "hr guide", "rules"]
     },
-    "data_visualization": {
-        "tools": ["sql_query_tool", "generate_visualization_tool"],
-        "triggers": ["plot", "chart", "graph", "visualize", "show as a bar chart", "report", "count", "average", "total", "statistics", "data"]
+    "data_analysis": {
+        "tools": ["sql_query_tool"],
+        "triggers": ["report", "count", "average", "total", "statistics", "data"]
+    },
+    "visualization": {
+        "tools": ["generate_visualization_tool"],
+        "triggers": ["plot", "chart", "graph", "visualize", "show as a bar chart"]
     },
     "profile_updates": {
         "tools": ["update_employee_profile_tool", "create_customer_profile_tool", "get_customer_details_tool"],
@@ -222,70 +223,35 @@ def _fetch_docs_from_fas(tenant_id: str) -> list:
     """
     Try to fetch documents from the FAS Django service.
     Expects JSON: {"documents": [{"page_content": "...", "metadata": {...}}, ...]}
-    
-    Fallback: fetch raw tenant data and chunk it locally if standard endpoint is missing.
+
+    Tries the remote URL first (unless VECTOR_STORE_LOCAL=true), then localhost.
+    Returns a list of LangChain Document objects, or [] on any failure.
     """
     from langchain_core.documents import Document as LCDoc
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-    urls = []
-    # Fetch these from env consistently
-    fas_remote = os.getenv("_FAS_REMOTE_URL") or _FAS_REMOTE_URL
-    fas_local = os.getenv("_FAS_LOCAL_URL") or _FAS_LOCAL_URL
-    
     urls = []
     if not _USE_LOCAL_VECTOR:
-        urls.append((fas_remote, "REMOTE"))
-    urls.append((fas_local, "LOCAL"))
+        urls.append((_FAS_REMOTE_URL, "REMOTE"))
+    urls.append((_FAS_LOCAL_URL, "LOCAL"))
 
     for url, label in urls:
-        logger.info(f"[VectorStore Aluke | Tenant: {tenant_id}] Trying {label} FAS at {url}")
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Trying {label} FAS at {url}")
         try:
-            # Try primary document endpoint
             resp = requests.get(url, params={"tenant_id": tenant_id}, timeout=_VECTOR_STORE_TIMEOUT)
-            
-            # If 404, try the TenantDetailView fallback
-            if resp.status_code == 404:
-                fallback_url = f"{url.rstrip('/')}/customer/TenantDetailView/"
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] Primary failed (404). Trying Fallback: {fallback_url}")
-                resp = requests.get(fallback_url, params={"tenant_id": tenant_id}, timeout=_VECTOR_STORE_TIMEOUT)
-
             resp.raise_for_status()
-            data = resp.json()
+            raw_docs = resp.json().get("documents", [])
 
-            # Case A: Standard documents list
-            if "documents" in data:
-                raw_docs = data.get("documents", [])
-                if not isinstance(raw_docs, list):
-                    logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: 'documents' is not a list.")
-                    continue
-                docs = [
-                    LCDoc(page_content=d["page_content"], metadata=d.get("metadata", {}))
-                    for d in raw_docs
-                    if isinstance(d, dict) and d.get("page_content")
-                ]
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: fetched {len(docs)} pre-built docs.")
-                return docs
-
-            # Case B: Raw Tenant Detail (TenantDetailView)
-            elif "tenant_text" in data:
-                text = data.get("tenant_text") or ""
-                doc_text = data.get("tenant_document") or ""
-                combined = f"{text}\n\n{doc_text}".strip()
-                
-                if not combined:
-                    logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: Tenant found but no text data available.")
-                    continue
-
-                splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-                chunks = splitter.split_text(combined)
-                docs = [LCDoc(page_content=c, metadata={"source": "fas_detail_view"}) for c in chunks]
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: Local chunking successful. {len(docs)} docs created.")
-                return docs
-
-            else:
-                logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: Unrecognized response format.")
+            if not isinstance(raw_docs, list):
+                logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: 'documents' is not a list.")
                 continue
+
+            docs = [
+                LCDoc(page_content=d["page_content"], metadata=d.get("metadata", {}))
+                for d in raw_docs
+                if isinstance(d, dict) and d.get("page_content")
+            ]
+            logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: fetched {len(docs)} docs.")
+            return docs
 
         except requests.exceptions.ConnectionError:
             logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: connection refused at {url}.")
@@ -299,9 +265,7 @@ def _fetch_docs_from_fas(tenant_id: str) -> list:
 
     logger.warning(f"[VectorStore | Tenant: {tenant_id}] All FAS endpoints failed.")
     return []
- 
 
- 
 
 def initialize_vector_store(tenant_id: str):
     """
@@ -359,462 +323,72 @@ def initialize_vector_store(tenant_id: str):
     return None, {"status": "not_found", "message": "FAS service unreachable and no disk cache found."}
 
 
-# Model/Service Name Variables - Moved to llm_handler.py
-OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
-_llm = None
 
 
-GLOBAL_SCOPE = "GLOBAL"
-NO_CONVO = "N/A"
-def should_continue(state: State) -> Literal["tool_node", END]:
-    """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
 
-    tenant_id = state.get("tenant_config", {}).get("tenant_id", "unknown")
-    conversation_id = state.get("conversation_id", "unknown")
-    log_info("Evaluating whether to continue or stop.", tenant_id, conversation_id)
 
-    messages = state.get("messages", [])
-    if not messages:
-        return END
-    # last_message = messages[-1]
-    # FIX: Find the last AIMessage specifically
-    last_message = next(
-        (m for m in reversed(messages) if isinstance(m, AIMessage)), None
-    )
-    log_debug(f"Last LLM message: {last_message}", tenant_id, conversation_id)
 
-    if last_message and getattr(last_message, "tool_calls", None):
-        log_info(f"LLM made tool calls: {[tc.get('name', 'unknown') for tc in last_message.tool_calls]}. Continuing to tool node.", tenant_id, conversation_id)
-        return "tool_node"
-    
-    if last_message and "parsed_json" in last_message.additional_kwargs:
-        parsed = last_message.additional_kwargs["parsed_json"]
-    else:
-        # Try parsing from content if missing
-        import json
-        try:
-            if last_message:
-                content_str = last_message.content if isinstance(last_message.content, str) else str(getattr(last_message, "content", ""))
-                parsed = json.loads(content_str)
-            else:
-                parsed = {}
-        except:
-            parsed = {}
 
-    tool_name = parsed.get("tool", "none")
-    if not last_message or str(tool_name).lower() == "none" or not tool_name:
-        log_info("LLM requested 'none' or no valid tool. Ending workflow.", tenant_id, conversation_id)
-        return END
-
-    log_info(
-        f"LLM requested tool: {tool_name}. Continuing to tool node.", tenant_id, conversation_id
-    )
-    return "tool_node"
+def get_llm_instance(tenant_id=None):
+    """Fetches LLM config using raw SQL."""
+    with SessionLocal() as session:
+        sql = "SELECT name, model FROM customer_llm LIMIT 1"
+        res = session.execute(text(sql)).fetchone()
+        
+        if not res:
+            return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+        
+        name = res[0].lower() if res[0] else "gemini"
+        model_name = res[1] or "gemini-1.5-flash"
+        
+        if name == "gemini":
+            return ChatGoogleGenerativeAI(model=model_name, google_api_key=os.getenv("GOOGLE_API_KEY"))
+        elif "ollama" in name:
+            return OllamaService(model=model_name)
+    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
 # Graph Nodes
-def tool_node(state: State) -> dict:
-    # Use the 'tools' list imported from tools.py
-    from tools import tools as tool_list
-    tools_by_name = {t.name: t for t in tool_list}
-    
-    tenant_config = state.get("tenant_config", {})
-    tenant_id = tenant_config.get("tenant_id", "unknown")
-    conversation_id = state.get("conversation_id", "unknown")
-    
-    log_info("Entered tool_node for execution.", tenant_id, conversation_id)
-    
-    try:
-        last_ai_message = state["messages"][-1]
-        tool_calls = getattr(last_ai_message, "tool_calls", [])
-        log_debug(f"Tool calls to execute: {tool_calls}", tenant_id, conversation_id)
-        
-        if not tool_calls:
-            return {"messages": []}
-
-        new_messages = []
-        state_updates = {}
-        
-        for tool_call in tool_calls:
-            tool_name = tool_call.get("name")
-            tool_args = tool_call.get("args", {})
-            
-            # Handle nested 'arguments' key if present (LLM sometimes wraps args)
-            if "arguments" in tool_args:
-                tool_args = tool_args["arguments"]
-            
-            # Inject context
-            tool_args["state"] = {k: v for k, v in state.items() if k != "messages"}
-            
-            tool = tools_by_name.get(tool_name)
-            if not tool:
-                log_error(f"Tool {tool_name} not found in {list(tools_by_name.keys())}", tenant_id, conversation_id)
-                new_messages.append(ToolMessage(
-                    content=f"Error: Tool {tool_name} not found.",
-                    tool_call_id=tool_call.get("id"),
-                    name=tool_name
-                ))
-                continue
-
-            # Execution
-            observation = tool.invoke(tool_args)
-            
-            # State Update Logic
-            if tool_name == "pdf_retrieval_tool":
-                state_updates["pdf_content"] = observation.get("pdf_content")
-            
-            if tool_name == "generate_visualization_tool":
-                if isinstance(observation, dict) and "visualization_result" in observation:
-                    viz_result = observation["visualization_result"]
-                    state_updates["visualization_image"] = viz_result.get("image_base64")
-                    state_updates["visualization_analysis"] = viz_result.get("analysis")
-            
-            new_messages.append(ToolMessage(
-                content=json.dumps(observation) if isinstance(observation, dict) else str(observation),
-                tool_call_id=tool_call.get("id"),
-                name=tool_name
-            ))
-            
-        log_info(f"Tool node executed successfully.", tenant_id, conversation_id)
-        return {"messages": new_messages, **state_updates}
-
-    except Exception as e:
-        log_error(f"Critical failure in tool_node: {str(e)}", tenant_id, conversation_id)
-        import traceback
-        log_error(traceback.format_exc(), tenant_id, conversation_id)
-        return {"messages": [ToolMessage(content=f"Error executing tool: {e}", tool_call_id="error", name="error_handler")]}
-
-
 def extract_final_answer(response):
     """
     Robustly extract the final text answer from an LLM response or structured object.
     """
-    try:
-        # Case 1: Structured Answer or dict
-        if isinstance(response, dict):
-            return response.get("answer") or json.dumps(response)
-        
-        # Case 2: AIMessage or object with .content
-        if hasattr(response, "content") and response.content:
-            content = response.content
-        else:
-            # Fallback if content is empty or response is not a message object
-            if hasattr(response, "tool_calls") and response.tool_calls:
-                return "Executing tools..."
-            content = str(response) if response is not None else "LLM did not return a response"
-
-        # Clean up markdown and extract JSON blocks if present
-        content_clean = re.sub(r"^```json\s*|\s*```$", "", content.strip(), flags=re.MULTILINE)
-        
-        # Try direct parse
-        try:
-            parsed = json.loads(content_clean)
-            if isinstance(parsed, dict) and "answer" in parsed:
-                return parsed["answer"]
-        except json.JSONDecodeError:
-            pass
-
-        # Try searching for JSON-like blocks if direct parse failed
-        json_blocks = re.findall(r"\{.*?\}", content_clean, flags=re.DOTALL)
-        for block in json_blocks:
-            try:
-                obj = json.loads(block)
-                if isinstance(obj, dict) and "answer" in obj:
-                    return obj["answer"]
-            except json.JSONDecodeError:
-                continue
-
-        return content_clean or "LLM returned empty response"
-    except Exception as e:
-        logger.error(f"Error in extract_final_answer: {e}")
-        return "Error extracting answer"
-
-def clean_message_history(messages):
-    """
-    Strips additional_kwargs and serialized state from messages 
-    to prevent LLM confusion and circular reference errors.
-    """
-    cleaned = []
-    for msg in messages:
-        if isinstance(msg, AIMessage):
-            # Keep only the content and tool_calls, discard the state-heavy additional_kwargs
-            cleaned.append(AIMessage(
-                content=msg.content, 
-                tool_calls=msg.tool_calls
-            ))
-        elif isinstance(msg, ToolMessage):
-            # Keep only the tool result
-            cleaned.append(ToolMessage(
-                content=msg.content, 
-                tool_call_id=msg.tool_call_id, 
-                name=msg.name
-            ))
-        else:
-            # HumanMessage and SystemMessage are usually safe
-            cleaned.append(msg)
-    return cleaned
-
-def normalize_tool_calls(response):
-    logger.info("Starting normalization of tool calls.")
+    # Case 1: Structured Answer or dict
+    if isinstance(response, dict):
+        return response.get("answer") or json.dumps(response)
     
-    # 1. Check if tool calls already exist
-    if hasattr(response, "tool_calls") and response.tool_calls:
-        logger.info("Tool calls already present in response.")
-        return response
-
-    if not isinstance(response.content, str):
-        logger.warning("Response content is not a string, skipping.")
-        return response
-
-    content = response.content.strip()
-    if not content:
-        logger.info("Response content is empty.")
-        return response
-
-    tool_calls = []
-    decoder = json.JSONDecoder()
-    pos = 0
-    
-    # 2. Iterate through content to find and parse multiple JSON objects
-    # Attempt a regex extraction first to handle common LLM formatting issues like trailing quotes
-    import re
-    # Match everything between the first '{' and last '}'
-    match = re.search(r"(\{.*\})", content, re.DOTALL)
-    if match:
-        content = match.group(1)
-
-    while pos < len(content):
-        try:
-            # Find the next potential JSON object
-            pos = content.find('{', pos)
-            if pos == -1:
-                break
-            
-            obj, index = decoder.raw_decode(content[pos:])
-            pos += index
-            
-            # Check if this object is a tool call
-            if isinstance(obj, dict) and ("tool" in obj or "name" in obj):
-                logger.info(f"Successfully extracted tool call: {obj.get('tool') or obj.get('name')}")
-                
-                # Extract args, falling back to all other keys if not explicitly nested
-                extracted_args = obj.get("parameters") or obj.get("args")
-                if not extracted_args or not isinstance(extracted_args, dict):
-                    extracted_args = {k: v for k, v in obj.items() if k not in ("tool", "name")}
-                elif not extracted_args:
-                    extracted_args = {}
-
-                tool_calls.append({
-                    "name": obj.get("tool") or obj.get("name"),
-                    "args": extracted_args,
-                    "id": f"call_{uuid.uuid4().hex[:12]}",
-                    "type": "tool_call"
-                })
-            elif isinstance(obj, dict) and "tool_call" in obj and isinstance(obj["tool_call"], dict):
-                logger.info(f"Successfully extracted tool_call: {obj['tool_call'].get('name')}")
-                tc = obj["tool_call"]
-                args = tc.get("arguments") or tc.get("args", {})
-                tool_calls.append({
-                    "name": tc["name"],
-                    "args": args,
-                    "id": tc.get("id", f"call_{uuid.uuid4().hex[:12]}"),
-                    "type": tc.get("type", "tool_call")
-                })
-            elif isinstance(obj, dict) and "tool_calls" in obj and isinstance(obj["tool_calls"], list):
-                logger.info(f"Successfully extracted tool_calls array with {len(obj['tool_calls'])} calls")
-                for tc in obj["tool_calls"]:
-                    if isinstance(tc, dict) and "name" in tc:
-                        # Map 'arguments' to 'args' if present
-                        args = tc.get("arguments") or tc.get("args", {})
-                        tool_calls.append({
-                            "name": tc["name"],
-                            "args": args,
-                            "id": tc.get("id", f"call_{uuid.uuid4().hex[:12]}"),
-                            "type": tc.get("type", "tool_call")
-                        })
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode JSON object at position {pos}: {e}")
-            pos += 1  # Skip to next character to attempt recovery
-        except Exception as e:
-            logger.error(f"Unexpected error during tool call normalization: {e}")
-            break
-            
-    # 3. Apply normalized tool calls to response
-    if tool_calls:
-        response.tool_calls = tool_calls
-        response.content = ""  # Clear raw text to clean up the UI
-        logger.info(f"Normalization complete. {len(tool_calls)} tool calls detected.")
+    # Case 2: AIMessage or object with .content
+    if hasattr(response, "content") and response.content:
+        content = response.content
     else:
-        logger.info("No tool calls detected in content.")
-        
-    return response
+        # Fallback if content is empty or response is not a message object
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            return "Executing tools..."
+        content = str(response) if response is not None else "LLM did not return a response"
+
+    # Clean up markdown and extract JSON blocks if present
+    content_clean = re.sub(r"^```json\s*|\s*```$", "", content.strip(), flags=re.MULTILINE)
+    
+    # Try direct parse
+    try:
+        parsed = json.loads(content_clean)
+        if isinstance(parsed, dict) and "answer" in parsed:
+            return parsed["answer"]
+    except:
+        pass
+
+    # Try searching for JSON-like blocks if direct parse failed
+    json_blocks = re.findall(r"\{.*?\}", content_clean, flags=re.DOTALL)
+    for block in json_blocks:
+        try:
+            obj = json.loads(block)
+            if isinstance(obj, dict) and "answer" in obj:
+                return obj["answer"]
+        except:
+            continue
+
+    return content_clean or "LLM returned empty response"
 
 def assistant_node(state: State, config: RunnableConfig):
-    """
-    Consolidated Assistant Node: HR Support, Data Analytics, and Customer Concierge.
-    Handles multiple roles and tool calling.
-    """
-    tenant_id = config["configurable"].get("tenant_id", "unknown")
-    conversation_id = config["configurable"].get("thread_id", "unknown")
-    messages = state["messages"]
-    logger.info(f"Messages before assistant processing: {messages}")
-    log_info(f"Assistant node triggered for tenant: {tenant_id} with nessage : {messages}", tenant_id, conversation_id)
-
-    # --- Resolve DB-sourced prompts with hardcoded fallbacks ---
-    tenant_config = state.get("tenant_config") or {}
-    # employee_id = {state.get('employee_id')}
-    employee_id = str(state.get('employee_id', 'unknown'))
-    current_year = datetime.now().year
-    previous_year = current_year - 1
-    current_date_str = datetime.now().strftime("%Y-%m-%d")
-    status_summary = state.get("status_summary", "No active application.")
-    pdf_content = state.get("pdf_content", "None")
-    web_content = state.get("web_content", "None")
-    sql_result = state.get("sql_result", "None")
-    tool_intent_map = ((state.get("tenant_config") or {}).get("tool_intent_map")
-  or tool_guide
-   )
-    # global_answer_prompt acts as the persona/intro section of system_prompt.
-    # Falls back to GLOBAL_FINAL_ANSWER_PROMPT if not set in the DB.
-    global_answer_prompt = (
-        tenant_config.get("global_answer_prompt1")
-        or GLOBAL_FINAL_ANSWER_PROMPT
-    )
-    
-    # agent_prompt is the full system prompt stored in DB (used as an alternative
-    # intro when set). If absent, the composed prompt below is used instead.
-    # agent_prompt = tenant_config.get("agent_prompt") or None
-
-    # Fetch the prompt template
-    agent_prompt = tenant_config.get("agent_prompt1",GLOBAL_FINAL_ANSWER_PROMPT)
-
-    # Build string of tool descriptions and arguments
-    tool_descriptions = "\n".join([f"- {t.name}: {t.description}\n  Arguments schema: {t.args}" for t in tools])
-
-    if agent_prompt:
-        try:
-            
-         system_prompt = agent_prompt.format(
-            ID=employee_id,
-            current_year=current_year,
-            previous_year=previous_year,
-            current_date_str=current_date_str,
-            pdf_content=pdf_content,
-            web_content=web_content,
-            # Using leave_application for the state result as requested
-            sql_result=sql_result,
-            status_summary=status_summary,
-            tool_intent_map=tool_intent_map,
-            tool_descriptions=tool_descriptions
-        )
-        except KeyError as e:
-            logger.error(f"Missing key in prompt template: {e}")
-            system_prompt = agent_prompt # Fallback to raw if format fails
-    else:
-        # Handle the case where no prompt is found
-        system_prompt = "Default fallback prompt or error handling logic here."
-
-
-
-
-
-    # 1. DYNAMIC CONTEXT PREPARATION (HR/Leave Status)
-    leave_app = state.get("leave_application")
-    status_summary = "No active application."
-    if leave_app:
-        status = leave_app.get("status")
-        if status == "success":
-            status_summary = f"Application {leave_app.get('application_id')} completed."
-        elif status == "prepared":
-            resumption = leave_app.get("details", {}).get("resumptionDate", "TBD")
-            status_summary = f"Application prepared. Action required: Confirm resumption date {resumption}."
-        elif status == "error":
-            status_summary = f"Process error: {leave_app.get('message')}"
-
-   
-
-    # 3. LLM INVOCATION
- 
-    # Check if last message was a tool result (we might already be done)
-    if messages and isinstance(messages[-1], ToolMessage):
-        logger.info("Last message was a tool result. LLM will now generate the final JSON response based on the tool's output.")
-
-    print(f"!!! TRACE: assistant_node starting. Messages: {len(messages)}", flush=True)
-    try:
-        # 1. Capture the raw response WITH bind_tools
-        # Use the global 'llm' instance directly to avoid redundant/unstable DB calls inside the graph
-        llm = get_model() 
-        if not llm:
-            logger.error("LLM instance is not available. Returning error response.", tenant_id, conversation_id)
-            return {"messages": [AIMessage(content=json.dumps({"tool": "none", "answer": "Error: LLM not available."}))]}
-        
-        llm_with_tools = llm.bind_tools(tools)
-        safe_messages = clean_message_history(state["messages"])
-        try:
-            response = llm_with_tools.invoke([SystemMessage(content=system_prompt)] + safe_messages)
-        except Exception as e:
-            log_error(f"LLM invoke failed: {e}", tenant_id, conversation_id)
-            return {"messages": [AIMessage(content=json.dumps({"answer": "I'm sorry, I'm experiencing connectivity issues. Please try again later."}))]}
-        
-        logger.info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
-    except BaseException as e:
-        import traceback
-        logger.error(f"CRITICAL CRASH in assistant_node: {e}\n{traceback.format_exc()}", tenant_id, conversation_id)
-        raise e
-    refined_response = normalize_tool_calls(response)
-    if refined_response.tool_calls:
-        logger.info(f"Tool call detected: {refined_response.tool_calls}")
-        return {"messages": [refined_response]}
-    else:
-        # Handle as standard text response
-        final_answer = extract_final_answer(refined_response)
-        logger.info(f"LLM response Assitant Node: {final_answer}")
-        return {"messages": [AIMessage(content=final_answer)]}
-    
-    # if hasattr(refined_response, "tool_calls") and refined_response.tool_calls:
-    #             logger.info(f"Tool calls foundAtejjd: {refined_response.tool_calls}")
-    #             return {"messages": [refined_response]}  # keep the AIMessage intact
-
-    # else:
-    #     extract_final_answer(refined_response) and (not hasattr(refined_response, "tool_calls") or not refined_response.tool_calls):
-    #         # Attach chart if present in state
-    #     viz_result = state.get("visualization_result")
-    #     if viz_result and "image_base64" in viz_result:
-    #             refined_response.chart_base64 = viz_result["image_base64"]
-                
-    #         return {
-    #             "messages": [AIMessage(content=refined_response.content)],
-    #             "status_summary": status_summary
-    #         }   
-
-def build_graph(tenant_id: str, conversation_id: str, checkpointer=None):
-    workflow = StateGraph(State)
-    log_info("Building graph for tenant: {tenant_id}, conversation: {conversation_id}", tenant_id, conversation_id)
-
-    # 1. Add Nodes
-    workflow.add_node("assistant_node", assistant_node)
-    workflow.add_node("tool_node", tool_node)
-    
-    
-    # workflow.add_node("guardrail_node", routing_guardrail_node)
-    # log_info("Guardrail node added to graph.", tenant_id, conversation_id)
-
-    # 2. Routing
-    workflow.add_edge(START, "assistant_node")
-    log_info("Edge added from START to assistant_node.", tenant_id, conversation_id)
-
-    # workflow.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
-    workflow.add_conditional_edges(
-        "assistant_node", should_continue, ["tool_node", END]
-    )
-
-   # After tool execution, always return to assistant
-    workflow.add_edge("tool_node", "assistant_node")
-    log_info("Edge added from tool_node to assistant_node.", tenant_id, conversation_id)
-
-    return workflow.compile(checkpointer=checkpointer)
-
-
-def assistant_nodev1(state: State, config: RunnableConfig):
     # Fix for lint: "get" is not a known attribute of "None"
     if state is None:
         state = cast(State, {}) 
@@ -1078,7 +652,32 @@ def assistant_nodev1(state: State, config: RunnableConfig):
         # return {"messages": [final_answer]}
 
 
+def tool_node(state: State):
+    last_msg = state["messages"][-1]
+    new_messages = []
+    tools_by_name = {t.name: t for t in tools}
+    
+    for call in last_msg.tool_calls:
+        tool_item = tools_by_name.get(call["name"])
+        if tool_item:
+            obs = tool_item.invoke({**call["args"], "state": state})
+            new_messages.append(ToolMessage(content=str(obs), tool_call_id=call["id"]))
+    
+    return {"messages": new_messages}
 
+def build_graph(checkpointer=None):
+    workflow = StateGraph(State)
+    workflow.add_node("assistant", assistant_node)
+    workflow.add_node("tools", tool_node)
+    
+    workflow.add_edge(START, "assistant")
+    workflow.add_conditional_edges(
+        "assistant",
+        lambda x: "tools" if x["messages"][-1].tool_calls else END
+    )
+    workflow.add_edge("tools", "assistant")
+    
+    return workflow.compile(checkpointer=checkpointer)
 
 def process_message(message_content: str, conversation_id: str, tenant_id: str, employee_id: Optional[str] = None, push_name: str = "User"):
     # Fallback for employee_id
@@ -1119,7 +718,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         
         # 2. Fetch Prompt
         if prompt_id:
-            p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE id = :pid"
+            p_sql = "SELECT agent_prompt, \"GLOBAL_FINAL_ANSWER_PROMPT\", \"TOOL_INTENT_MAP\" FROM customer_prompt WHERE id = :pid"
             
             log_info(f"Agent Prompt Fetched from db: {p_sql}", tenant_id, conversation_id)
             p_res = session.execute(text(p_sql), {"pid": prompt_id}).fetchone()
@@ -1136,47 +735,15 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             "push_name": push_name,
             "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
             "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
-            "tool_intent_map": p_res[2] if p_res else tool_guide,
+            "tool_intent_map": p_res[2] if p_res else TOOL_INTENT_MAP,
             # Vector store loaded from disk (built by Django service)
             "vector_store": tenant_vector_store,
         }
-    # --- Logging Connectivity confirmation ---
-    # 1. Database Connectivity Check
-    db_connected = False
-    record_found = False
-    try:
-        with SessionLocal() as check_session:
-            # Check for a simple record to confirm DB connectivity and data presence
-            res = check_session.execute(text("SELECT id, name, code FROM org_tenant WHERE code = :code LIMIT 1"), {"code": tenant_id}).fetchone()
-            db_connected = True
-            if res:
-                record_found = True
-                log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
-                # Fetch a sample record from another table to be double sure - e.g. Prompt or LeaveType
-                sample = check_session.execute(text("SELECT id, name FROM customer_prompt LIMIT 1")).fetchone()
-                if sample:
-                    log_info(f"📊 Sample Prompt Record: ID={sample[0]}, Name='{sample[1]}'", tenant_id, conversation_id)
-            else:
-                log_warning(f"⚠️ DB Connected, but NO tenant record found for '{tenant_id}'.", tenant_id, conversation_id)
-    except Exception as e:
-        log_error(f"❌ DB Connectivity check failed: {e}", tenant_id, conversation_id)
 
-    # 2. FAS URL Connectivity Check
-    fas_url = os.getenv("_FAS_REMOTE_URL") or os.getenv("VECTOR_STORE_URL")
-    if fas_url:
-        try:
-            # Simple HEAD request to check availability
-            response = requests.head(fas_url, timeout=5)
-            log_info(f"✅ FAS Connectivity: {fas_url} returned {response.status_code}", tenant_id, conversation_id)
-        except Exception as e:
-            log_error(f"❌ FAS Connectivity failed for {fas_url}: {e}", tenant_id, conversation_id)
-
-    log_info(f"Tenant config prepared. DB URI present: {bool(db_uri)}", tenant_id, conversation_id)
-        
-    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as checkpointer:
+    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
     # with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
-        checkpointer.setup()
-        app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
+        cp.setup()
+        app = build_graph(cp)
         
         config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
         initial_state = {
@@ -1185,30 +752,6 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         }
         
         final_state = app.invoke(initial_state, config=config)
+        answer = final_state["messages"][-1].content
         
-        # Correctly access the final answer from the messages in the state
-        messages = final_state.get("messages", [])
-        if messages:
-            current_answer = messages[-1].content
-        else:
-            current_answer = ""
-            
-        logger.info(f"LLM response Process message : {current_answer}")
-        metadata = final_state.get("metadata", {})
-        
-        if current_answer:
-            if isinstance(current_answer, dict) and "answer" in current_answer:
-                current_answer = current_answer["answer"]
-                
-            return {
-                "answer": current_answer,
-                "metadata": metadata,
-                "visualization_image": final_state.get("visualization_image"),
-                "visualization_analysis": final_state.get("visualization_analysis"),
-            }
-        else:
-            fallback = "I apologize, but I encountered an internal error processing your request."
-            logger.info(f"LLM Response Fallback: {fallback}")
-            return {"answer": fallback, "metadata": {}, "visualization_image": None, "visualization_analysis": None}
-
-
+        return {"answer": answer}

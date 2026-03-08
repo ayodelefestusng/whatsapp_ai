@@ -271,6 +271,8 @@ class Answer(BaseModel):
 class VisualizationInput(BaseModel):
     """Input schema for the generate_visualization_tool."""
     query: str = Field(description="The user's natural language request for a chart or visualization, e.g., 'Plot the total sales by region'.")
+    data: Optional[Any] = Field(None, description="The raw data payload from sql_query_tool to visualize. MUST be provided if available.")
+    state: Optional[dict] = Field(None, description="Injected workflow state")
 class SQLQueryInput(BaseModel):
     """Input schema for the sql_query_tool."""
     query: str = Field(description="The natural language question to be converted into a SQL query.")
@@ -339,3 +341,5 @@ class State(MessagesState):
     update_info: Optional[dict]
     job_opportunities: Optional[List[dict]]
     leave_status: Optional[dict]
+    visualization_image: Optional[str]
+    visualization_analysis: Optional[str]

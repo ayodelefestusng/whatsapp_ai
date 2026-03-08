@@ -19,6 +19,9 @@ langchain-google-genai
 langgraph-checkpoint-postgres
 python-dateutil
 pandas
+matplotlib
+faiss-cpu
+"fastapi[standard]"
 # requests
 # sqlalchemy
 # python-dotenv

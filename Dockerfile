@@ -7,9 +7,9 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies without building binary extensions
+# Update the RUN command in your Dockerfile
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
-
+    pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
 # Copy source code
 COPY . .
 

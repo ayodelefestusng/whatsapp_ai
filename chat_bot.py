@@ -28,6 +28,7 @@ from langchain_community.vectorstores import FAISS
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
+from langchain.chat_models import init_chat_model
 
 # Local Imports
 from database import SessionLocal
@@ -37,29 +38,42 @@ from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
 from tools import tools, init_sql_agent
 
-_llm = None
-# Constants / Fallbacks
-OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
-# DEFAULT_AGENT_PROMPT = 
 
+GEMINI_INIT= os.getenv("GEMINI_INIT", "google_genai:gemini-flash-latest")
+
+# Constants / Fallbacks
+# OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
+# DEFAULT_AGENT_PROMPT = 
+llm_fallback = init_chat_model(GEMINI_INIT)
+model = llm_fallback  # Consistent naming for the primary LLM
+_llm = None
+
+
+_llm = None
+
+        
 def get_llm_instance(tenant_id=None):
-    """Fetches LLM config using raw SQL."""
+    """Fetches LLM config using raw SQL and initializes dynamically."""
     with SessionLocal() as session:
         sql = "SELECT name, model FROM customer_llm LIMIT 1"
         res = session.execute(text(sql)).fetchone()
         
+        # If no config is found in the DB, default to a safe fallback
         if not res:
+            logger.warning("No LLM config found in DB, defaulting to Gemini.")
             return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
         
         name = res[0].lower() if res[0] else "gemini"
         model_name = res[1] or "gemini-1.5-flash"
         
-        if name == "gemini":
+        if "gemini" in name:
             return ChatGoogleGenerativeAI(model=model_name, google_api_key=os.getenv("GOOGLE_API_KEY"))
+            
         elif "ollama" in name:
+            # Initialize OllamaService without local network parameters
             return OllamaService(model=model_name)
+            
     return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
-
 
 def get_model():
     """
@@ -72,114 +86,206 @@ def get_model():
 
     try:
         base_llm = get_llm_instance()
+        
         if base_llm is not None:
-            _llm = base_llm
+            # 'tools' must be defined earlier in your file or imported
+            # llm= base_llm
             logger.info("✅ Model and tools initialized successfully.")
-            return _llm
+            return base_llm
         
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_model: {e}", exc_info=True)
+        logger.error(f"❌ Unexpected error in get_model_with_tools: {e}", exc_info=True)
     
     return None
 
-# Graph Nodes
+
+
+# def get_llm_instance(llm_config=None):
+#     """
+#     Returns an LLM instance based on the provided configuration or global DB setting.
+    
+#     Supported LLM types:
+#     - gemini: Google Gemini API
+#     - ollama: Local Ollama instance
+#     - ollama_cloud: Ollama Cloud API (requires OLLAMA_API_KEY)
+#     """
+#     # If explicit config passed, use it. Otherwise fetch global if needed.
+#     # Note: 'llm_config' here is expected to be a Django ORM object or None.
+#     with SessionLocal() as session:
+#         sql = "SELECT name, model FROM customer_llm LIMIT 1"
+#         res = session.execute(text(sql)).fetchone()
+        
+#         if not res:
+#             return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+        
+#         name = res[0].lower() if res[0] else "gemini"
+#         model_name = res[1] or "gemini-1.5-flash"
+        
+#     # logger.info("🌐 get_llm_instance ")
+#     # if not llm_config:
+#     #     logger.info("🌐 Not Initializing")
+#     #     llm_config = LLM.objects.first()
+
+#     # # Default to initialized model_with_tools if no config found or name is unknown
+#     # if not llm_config:
+#     #     logger.info("🌐 Not Initializing")
+#     #     return model
+
+#     # name = llm_config.name.lower()
+#     if name == "gemini":
+#         api_key = os.getenv("GEMINI_API_KEY")  # Always from env
+#         model_name = model_name or os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
+        
+#         # Instantiate Gemini
+#         # Standard safety settings can be added here as needed
+#         llm_instance = ChatGoogleGenerativeAI(
+#             model=model_name,
+#             google_api_key=api_key,
+#             temperature=0,
+#             convert_system_message_to_human=True 
+#         )
+#         logger.info("🌐 Initializing Gemini")
+#         # return llm_instance.bind_tools(tools)
+#         return llm_instance 
+#     elif name == "ollama_cloud":
+#         # Use ollama_cloud as a special sentinel value
+#         logger.info("🌐 Initializing Ollama Cloud LLM instance")
+#         llm_instance = OllamaService(
+#             base_url=os.getenv("OLLAMA_API_URL", "https://ai.notchhr.io/api/chat/local"),  
+#             username=os.getenv("OLLAMA_USERNAME", "ai-user"),  
+#             password=os.getenv("OLLAMA_PASSWORD", "x2GS7jEF@#2T"),  
+#             model="ollama_cloud"  # Special sentinel value triggers cloud API
+#         )
+#         logger.info("🌐 Initilzized ollama_cloud ")
+#         # return llm_instance.bind_tools(tools)
+#         return llm_instance 
+    
+#     logger.info("🌐 Fall Back to Defaul Model config")
+#     return model
+
+
+# def get_model():
+#     """
+#     Lazy-loads the model and binds tools only when needed.
+#     """
+#     global _llm
+    
+#     if _llm is not None:
+#         return _llm
+
+#     try:
+#         base_llm = get_llm_instance()
+        
+#         if base_llm is not None:
+#             # 'tools' must be defined earlier in your file or imported
+#             # llm= base_llm
+#             logger.info("✅ Model and tools initialized successfully.")
+#             return base_llm
+        
+#     except Exception as e:
+#         logger.error(f"❌ Unexpected error in get_model_with_tools: {e}", exc_info=True)
+    
+#     return None
+
+
+# # Graph Nodes
 GLOBAL_ROUTING_PROMPT = """You are a helpful AI assistant for ATB Bank. Your task is to analyze the user's request and decide if a tool is needed to answer it.
 
-You have access to the following tools:
-- `pdf_retrieval_tool`: For questions about bank policies, products, or internal knowledge.
-- `tavily_search_tool`: For general knowledge or up-to-date information.
-- `sql_query_tool`: For questions about specific data, like user counts or transaction volumes.
-- **`generate_visualization_tool`**: **Use this tool ONLY when the user explicitly asks to 'plot', 'chart', 'graph', or 'visualize' data. This is your primary tool for creating visual representations from database data.**
+    You have access to the following tools:
+    - `pdf_retrieval_tool`: For questions about bank policies, products, or internal knowledge.
+    - `tavily_search_tool`: For general knowledge or up-to-date information.
+    - `sql_query_tool`: For questions about specific data, like user counts or transaction volumes.
+    - **`generate_visualization_tool`**: **Use this tool ONLY when the user explicitly asks to 'plot', 'chart', 'graph', or 'visualize' data. This is your primary tool for creating visual representations from database data.**
 
-Based on the conversation history, either call the most appropriate tool to gather information or, if you have enough information already, prepare to answer the user directly.
-"""
+    Based on the conversation history, either call the most appropriate tool to gather information or, if you have enough information already, prepare to answer the user directly.
+    """
 
 GLOBAL_FINAL_ANSWER_PROMPT1 = """You are Damilola, the AI-powered virtual assistant for ATB. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
 
-You operate in three modes:
-1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
-2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe what the chart shows and what it means for the user.
-3. **HR Assistant**: Respond with empathy, clarity, and professionalism regarding leave, payslips, and workplace policies.
+    You operate in three modes:
+    1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
+    2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe what the chart shows and what it means for the user.
+    3. **HR Assistant**: Respond with empathy, clarity, and professionalism regarding leave, payslips, and workplace policies.
 
-Your response must be:
-- **Final**: No follow-up questions or uncertainty.
-- **Clear and Polite**: Use emotionally intelligent language, especially if the user expresses frustration or confusion.
-- **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
-- **Structured**: Always return your answer in the following JSON format.
-- **Structured**: use naira sign whne currency us required 
+    Your response must be:
+    - **Final**: No follow-up questions or uncertainty.
+    - **Clear and Polite**: Use emotionally intelligent language, especially if the user expresses frustration or confusion.
+    - **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
+    - **Structured**: Always return your answer in the following JSON format.
+    - **Structured**: use naira sign whne currency us required 
 
-"""
+    """
 
 GLOBAL_FINAL_ANSWER_PROMPT = """
   You are Damilola, the AI-powered virtual assistant for ATB. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
 
-You operate in three modes:
-1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
-2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe what the chart shows and what it means for the user.
-3. **HR Assistant**: Respond with empathy, clarity, and professionalism regarding leave, payslips, and workplace policies.
+    You operate in three modes:
+    1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
+    2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe what the chart shows and what it means for the user.
+    3. **HR Assistant**: Respond with empathy, clarity, and professionalism regarding leave, payslips, and workplace policies.
 
-Your response must be:
-- **Final**: No follow-up questions or uncertainty.
-- **Clear and Polite**: Use emotionally intelligent language, especially if the user expresses frustration or confusion.
-- **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
-- **Structured**: Always return your answer in the following JSON format.
-- **Structured**: use naira sign whne currency us required 
-do not hallucinate, either use the tool or response that you are not sure if unsure 
+    Your response must be:
+    - **Final**: No follow-up questions or uncertainty.
+    - **Clear and Polite**: Use emotionally intelligent language, especially if the user expresses frustration or confusion.
+    - **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
+    - **Structured**: Always return your answer in the following JSON format.
+    - **Structured**: use naira sign whne currency us required 
+    do not hallucinate, either use the tool or response that you are not sure if unsure 
 
-    OPERATING PROTOCOLS:
+        OPERATING PROTOCOLS:
+        
+        PROTOCOL 1: LEAVE REQUESTS
+        - If the user wants to apply for leave, you MUST first call 'fetch_available_leave_types_tool'.
+        - If the user specifies a leave type NOT in the list provided by 'fetch_available_leave_types_tool':
+        1. Politely inform them that '[InvalidType]' is not available for their category.
+        2. Re-list the valid options.
+        3. Do NOT call 'prepare_leave_application_tool' until a valid type is selected.
+        - LEAVE YEAR LOGIC: Ask the user: "Is this leave for the current year or your previous year's carry-over?"
+        Current -> {current_year}, Previous -> {previous_year}.
+        - SUCCESS: After 'submit_leave_application_tool' confirms success, if it was 'Vacation', offer help with travel via 'search_travel_deals_tool'.
+
+        PROTOCOL 2: PAYSLIPS
+        - Once 'get_payslip_tool' returns, inform the user: 'Your payslip has been sent to your email.'
+
+        PROTOCOL 3: HR POLICIES & KNOWLEDGE
+        - For policy questions, use 'pdf_retrieval_tool' to search HR handbooks.
+
+        PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
+        - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
+        - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
+        - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
+        - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
+
+        PROTOCOL 5: PROFILE UPDATES
+        - Use 'update_customer_tool' or 'update_employee_profile_tool'.
+        - If bank name is missing for an account update, ask for it before calling the tool.
+
+        PROTOCOL 6: LEAVE STATUS
+        - Use 'fetch_leave_status_tool' for approvals and pending status.
+
+        CONTEXT:
+        - Employee ID: {ID}
+        - Current Date: {current_date_str}
+        - Current Leave/Workflow Status: {status_summary}
+        - Document Context: {pdf_content}
+        - Web Context: {web_content}
+        - SQL Result: {sql_result}
+        
+
+        Tool Guide:{tool_intent_map}
+        - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
     
-    PROTOCOL 1: LEAVE REQUESTS
-    - If the user wants to apply for leave, you MUST first call 'fetch_available_leave_types_tool'.
-    - If the user specifies a leave type NOT in the list provided by 'fetch_available_leave_types_tool':
-      1. Politely inform them that '[InvalidType]' is not available for their category.
-      2. Re-list the valid options.
-      3. Do NOT call 'prepare_leave_application_tool' until a valid type is selected.
-    - LEAVE YEAR LOGIC: Ask the user: "Is this leave for the current year or your previous year's carry-over?"
-      Current -> {current_year}, Previous -> {previous_year}.
-    - SUCCESS: After 'submit_leave_application_tool' confirms success, if it was 'Vacation', offer help with travel via 'search_travel_deals_tool'.
+        ### Available Tools & Required Arguments:
+        {tool_descriptions}
 
-    PROTOCOL 2: PAYSLIPS
-    - Once 'get_payslip_tool' returns, inform the user: 'Your payslip has been sent to your email.'
-
-    PROTOCOL 3: HR POLICIES & KNOWLEDGE
-    - For policy questions, use 'pdf_retrieval_tool' to search HR handbooks.
-
-    PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
-    - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
-    - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
-    - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
-    - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
-
-    PROTOCOL 5: PROFILE UPDATES
-    - Use 'update_customer_tool' or 'update_employee_profile_tool'.
-    - If bank name is missing for an account update, ask for it before calling the tool.
-
-    PROTOCOL 6: LEAVE STATUS
-    - Use 'fetch_leave_status_tool' for approvals and pending status.
-
-    CONTEXT:
-    - Employee ID: {ID}
-    - Current Date: {current_date_str}
-    - Current Leave/Workflow Status: {status_summary}
-    - Document Context: {pdf_content}
-    - Web Context: {web_content}
-    - SQL Result: {sql_result}
-    
-
-    Tool Guide:{tool_intent_map}
-    - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
-   
-    ### Available Tools & Required Arguments:
-    {tool_descriptions}
-
-       ### Output Format:
-You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
-```json
-{{
-  "answer": "Your response to the user",
-}}
-```
-    """
+        ### Output Format:
+    You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
+    ```json
+    {{
+    "answer": "Your response to the user",
+    }}
+    ```
+        """
 
 
 
@@ -335,7 +441,7 @@ def initialize_vector_store(tenant_id: str):
 
 
 # Model/Service Name Variables - Moved to llm_handler.py
-OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
+# OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 _llm = None
 
 
@@ -537,7 +643,7 @@ def normalize_tool_calls(response):
         return response
 
     if not isinstance(response.content, str):
-        logger.warning("Response content is not a string, skipping.")
+        logger.info("Response content is not a string, skipping.")
         return response
 
     content = response.content.strip()
@@ -631,7 +737,7 @@ def assistant_node(state: State, config: RunnableConfig):
     tenant_id = config["configurable"].get("tenant_id", "unknown")
     conversation_id = config["configurable"].get("thread_id", "unknown")
     messages = state["messages"]
-    logger.info(f"Messages before assistant processing: {messages}")
+    logger.info(f"Messages before assistant processing Aliue: {messages}")
     log_info(f"Assistant node triggered for tenant: {tenant_id} with nessage : {messages}", tenant_id, conversation_id)
 
     # --- Resolve DB-sourced prompts with hardcoded fallbacks ---
@@ -648,6 +754,8 @@ def assistant_node(state: State, config: RunnableConfig):
     tool_intent_map = ((state.get("tenant_config") or {}).get("tool_intent_map")
   or tool_guide
    )
+
+    push_name = tenant_config.get("push_name", "User")
     # global_answer_prompt acts as the persona/intro section of system_prompt.
     # Falls back to GLOBAL_FINAL_ANSWER_PROMPT if not set in the DB.
     global_answer_prompt = (
@@ -705,7 +813,8 @@ def assistant_node(state: State, config: RunnableConfig):
         elif status == "error":
             status_summary = f"Process error: {leave_app.get('message')}"
 
-   
+    greeting_instruction = f"Always greet or address the user using their name: {push_name}, if they are starting a conversation or if appropriate."
+
 
     # 3. LLM INVOCATION
  
@@ -721,26 +830,27 @@ def assistant_node(state: State, config: RunnableConfig):
         # Use the global 'llm' instance directly to avoid redundant/unstable DB calls inside the graph
         logger.info(f"Messages before assistant processing: {messages}")
         llm = get_model() 
-        logger.info(f"LLM instance: {llm}", tenant_id, conversation_id)
+        log_info(f"LLM instance: {llm}", tenant_id, conversation_id)
         if not llm:
-            logger.error("LLM instance is not available. Returning error response.", tenant_id, conversation_id)
+            log_error("LLM instance is not available. Returning error response.", tenant_id, conversation_id)
             return {"messages": [AIMessage(content=json.dumps({"tool": "none", "answer": "Error: LLM not available."}))]}
-        logger.info(f"Tools: {tools}", tenant_id, conversation_id)
+        log_info(f"Tools: {tools}", tenant_id, conversation_id)
         llm_with_tools = llm.bind_tools(tools)
-        logger.info(f"LLM with tools: {llm_with_tools}", tenant_id, conversation_id)
+        log_info(f"LLM with tools: {llm_with_tools}", tenant_id, conversation_id)
+        
         safe_messages = clean_message_history(state["messages"])
-        logger.info(f"Safe messages: {safe_messages}", tenant_id, conversation_id)
+        log_info(f"Safe messages: {safe_messages}", tenant_id, conversation_id)
         try:
-            response = llm_with_tools.invoke([SystemMessage(content=system_prompt)] + safe_messages)
-            logger.info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
+            response = llm_with_tools.invoke([SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}")] + safe_messages)
+            log_info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
         except Exception as e:
             log_error(f"LLM invoke failed: {e}", tenant_id, conversation_id)
             return {"messages": [AIMessage(content=json.dumps({"answer": "I'm sorry, I'm experiencing connectivity issues. Please try again later."}))]}
         
-        logger.info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
+        log_info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
     except BaseException as e:
         import traceback
-        logger.error(f"CRITICAL CRASH in assistant_node: {e}\n{traceback.format_exc()}", tenant_id, conversation_id)
+        log_error(f"CRITICAL CRASH in assistant_node: {e}\n{traceback.format_exc()}", tenant_id, conversation_id)
         raise e
     refined_response = normalize_tool_calls(response)
     if refined_response.tool_calls:
@@ -828,6 +938,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
 
     try:
         with SessionLocal() as session:
+            log_info("Fetching tenant AI config", tenant_id, conversation_id)
             # 1. Fetch Tenant AI config
             ta_sql = """
                 SELECT prompt_template_id, db_uri 
@@ -846,6 +957,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             else:
                 p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE name = 'standard' LIMIT 1"
                 p_res = session.execute(text(p_sql)).fetchone()
+            log_info("Fetched tenant AI config", tenant_id, conversation_id)    
     except Exception as e:
         log_error(f"Database configuration fetch failed: {e}. Using defaults.", tenant_id, conversation_id)
 
@@ -857,7 +969,6 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
         "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
         "tool_intent_map": p_res[2] if p_res else tool_guide,
-        "vector_store": tenant_vector_store,
     }
     # --- Logging Connectivity confirmation ---
     # 1. Database Connectivity Check
@@ -867,6 +978,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         with SessionLocal() as check_session:
             # Check for a simple record to confirm DB connectivity and data presence
             res = check_session.execute(text("SELECT id, name, code FROM org_tenant WHERE code = :code LIMIT 1"), {"code": tenant_id}).fetchone()
+            log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
             db_connected = True
             if res:
                 record_found = True
@@ -915,17 +1027,17 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
         initial_state = {
             "messages": [HumanMessage(content=message_content)],
-            "tenant_config": tenant_config_dict
+            "user_query": message_content,
+            "tenant_config": tenant_config_dict,
+            "vector_store_path": persist_directory
         }
         
         final_state = app.invoke(initial_state, config=config)
         
         # Correctly access the final answer from the messages in the state
         messages = final_state.get("messages", [])
-        if messages:
-            current_answer = messages[-1].content
-        else:
-            current_answer = ""
+        # if messages:
+        current_answer = messages[-1].content if messages else ""
             
         logger.info(f"LLM response Process message : {current_answer}")
         metadata = final_state.get("metadata", {})
@@ -933,19 +1045,26 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         if current_answer:
             if isinstance(current_answer, dict) and "answer" in current_answer:
                 current_answer = current_answer["answer"]
-                
-            return {
+            
+            # Start with the mandatory fields
+            result = {
                 "answer": current_answer,
-                "metadata": metadata,
-                "visualization_image": final_state.get("visualization_image"),
-                "visualization_analysis": final_state.get("visualization_analysis"),
+                "metadata": metadata
             }
+            
+            # Only add visualization fields if they exist and are not None
+            if final_state.get("visualization_image"):
+                result["visualization_image"] = final_state["visualization_image"]
+                
+            if final_state.get("visualization_analysis"):
+                result["visualization_analysis"] = final_state["visualization_analysis"]
+                
+            return result
+            
         else:
             fallback = "I apologize, but I encountered an internal error processing your request."
             logger.info(f"LLM Response Fallback: {fallback}")
-            return {"answer": fallback, "metadata": {}, "visualization_image": None, "visualization_analysis": None}
-
-
+            return {"answer": fallback, "metadata": {}}
 
 def assistant_nodev1(state: State, config: RunnableConfig):
     # Fix for lint: "get" is not a known attribute of "None"
@@ -1018,11 +1137,11 @@ def assistant_nodev1(state: State, config: RunnableConfig):
     
     # Static system prompt instruction for pushName
     greeting_instruction = f"Always greet or address the user using their name: {push_name}, if they are starting a conversation or if appropriate."
-    
+    logger.info(f"Messages greeting_instruction: {greeting_instruction}")
     llm = get_llm_instance(tenant_id)
-    
+    logger.info(f"Messages llm: {llm}")
     messages = state.get("messages", [])
-    logger.info(f"Messages before assistant processing: {messages}")
+    logger.info(f"Messages messages: {messages}")
 
     llm_with_tools = llm.bind_tools(tools)
     

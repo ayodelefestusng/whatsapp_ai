@@ -1,31 +1,18 @@
-# Use official lightweight Python image
 FROM python:3.11-slim
-
-# Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (for psycopg2 and other libs)
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first (for caching)
+# Only copy requirements first
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies without building binary extensions
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Copy project files
+# Copy source code
 COPY . .
 
-# Expose FastAPI port
+# Expose port and run
 EXPOSE 8000
-
-# Run FastAPI with Uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

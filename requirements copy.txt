@@ -1,0 +1,34 @@
+fastapi
+uvicorn[standard]
+SQLAlchemy==2.0.36
+psycopg[binary]
+redis==5.0.1
+python-dotenv==1.0.1
+requests==2.32.3
+httpx==0.27.0
+pytest==8.1.1
+pytest-asyncio==0.23.6
+alembic==1.13.1
+ollama
+langgraph
+langchain
+langchain-community
+langchain-text-splitters 
+langchain-tavily
+langchain-google-genai
+langgraph-checkpoint-postgres
+python-dateutil
+pandas
+matplotlib
+faiss-cpu
+# "fastapi[standard]"
+# requests
+# sqlalchemy
+# python-dotenv
+# cryptography
+# aiomysql
+# asyncmy
+# httpx
+# mysql-connector-python
+# aiosqlite
+# pymysql

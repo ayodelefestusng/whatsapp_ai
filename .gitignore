@@ -10,3 +10,5 @@ wheels/
 .venv
 .env
 .yml
+.log
+**/faiss_dbs/

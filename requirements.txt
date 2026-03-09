@@ -21,7 +21,7 @@ python-dateutil
 pandas
 matplotlib
 faiss-cpu
-"fastapi[standard]"
+# "fastapi[standard]"
 # requests
 # sqlalchemy
 # python-dotenv

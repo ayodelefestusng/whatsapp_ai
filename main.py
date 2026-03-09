@@ -1,20 +1,16 @@
 import os
-import json
-import logging
-from fastapi import FastAPI, HTTPException, Request, Depends, Form
+import re
+import requests
+import tempfile
+import uvicorn
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
-from typing import Optional, Any
+from typing import Optional
 
-from tools import log_debug
-from database import engine, Base
-from chat_bot import log_info,log_error, process_message
-
-# Ensure tables exist (legacy check, though FastAPI doesn't manage them)
-# Base.metadata.create_all(bind=engine)
+from chat_bot import log_info, log_error, process_message, ingest_pdf_for_tenant
 
 app = FastAPI(title="Chatbot API", description="FastAPI Refactor with WhatsApp Integration")
 
-# Hardcoded fallback as requested
 DEFAULT_EMPLOYEE_ID = "obinna.kelechi.adewale@dignityconcept.tech"
 
 class ChatRequest(BaseModel):
@@ -24,15 +20,65 @@ class ChatRequest(BaseModel):
     employee_id: Optional[str] = DEFAULT_EMPLOYEE_ID
     pushName: Optional[str] = "User"
 
+class LoadPDFRequest(BaseModel):
+    tenant_id: str
+    file_path: str
+
+def convert_drive_link_to_direct(url: str) -> str:
+    """
+    Convert a Google Drive link into a direct download URL.
+    """
+    match = re.search(r'/d/([a-zA-Z0-9_-]+)', url)
+    if not match:
+        match = re.search(r'id=([a-zA-Z0-9_-]+)', url)
+
+    if match:
+        file_id = match.group(1)
+        direct_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+        log_debug(f"Converted Google Drive link to direct: {direct_url}", "N/A", "system")
+        return direct_url
+    else:
+        raise ValueError("Could not extract file ID from Google Drive link")
+
+def fetch_and_save_pdf(url: str) -> str:
+    """
+    Download a PDF (or binary stream) from a URL and save it locally.
+    Returns the local file path.
+    """
+    log_info(f"Attempting to download PDF from URL: {url}", "N/A", "system")
+    resp = requests.get(url, allow_redirects=True, stream=True, timeout=30)
+    
+    if resp.status_code != 200:
+        raise ValueError(f"Failed to download URL. Status code: {resp.status_code}")
+        
+    ct = resp.headers.get("Content-Type", "").lower()
+    log_info(f"Download response Content-Type: {ct}", "N/A", "system")
+    
+    # Allow some flexibility in content types
+    if "pdf" in ct or "binary" in ct or "octet-stream" in ct or "application/x-download" in ct:
+        fd, temp_path = tempfile.mkstemp(suffix=".pdf")
+        with os.fdopen(fd, "wb") as tmp:
+            for chunk in resp.iter_content(chunk_size=8192):
+                tmp.write(chunk)
+        log_info(f"Successfully downloaded PDF to {temp_path}", "N/A", "system")
+        return temp_path
+    else:
+        # For Google Drive, sometimes it returns text/html for auth or virus warnings
+        if "text/html" in ct and "drive.google.com" in url:
+            raise ValueError("Google Drive returned an HTML page (possibly a virus warning or authorization requirement) instead of the PDF binary.")
+        raise ValueError(f"URL did not return a PDF. Got Content-Type: {ct}")
+
+def log_debug(msg, tenant_id, conversation_id):
+    # Stub for log_debug if not imported
+    from logger_utils import logger
+    logger.debug(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
+
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "Chatbot API is running"}
 
 @app.post("/chatbot_webhook")
 async def chatbot_webhook(request: ChatRequest):
-    """
-    Endpoint for Postman or internal testing.
-    """
     try:
         response = process_message(
             message_content=request.message,
@@ -46,30 +92,75 @@ async def chatbot_webhook(request: ChatRequest):
         log_error(f"Error in chatbot_webhook: {e}", request.tenant_id or "DMC", "postman_session")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/whatsapp_webhook")
-async def whatsapp_webhook(request: Request):
-    """
-    Standardizes WhatsApp integration (e.g. from Evolution API).
-    Maps conversation_id to phone number.
-    """
-    log_info("Webhook url called ", "tenant_id", "conversation_id")
+@app.post("/load_pdf")
+async def load_pdf(request: LoadPDFRequest):
+    tenant_id = request.tenant_id
+    raw_file_path = request.file_path.strip()
+    local_pdf_path = None
+    
+    log_info(f"load_pdf triggered for tenant {tenant_id}. Input path: {raw_file_path}", tenant_id, "system")
 
     try:
-        # Check if it's JSON or Form data
-        content_type = request.headers.get("content-type", "")
+        # 1. Determine if it's a URL or local path
+        if raw_file_path.startswith(("http://", "https://")):
+            processed_url = raw_file_path
+            
+            # Convert viewer link to direct download format if it's Google Drive
+            if "drive.google.com" in processed_url:
+                try:
+                    processed_url = convert_drive_link_to_direct(processed_url)
+                except ValueError as ve:
+                    log_error(f"Failed to convert drive link: {ve}", tenant_id, "system")
+                    raise HTTPException(status_code=400, detail=str(ve))
+            
+            # Download and save locally
+            try:
+                local_pdf_path = fetch_and_save_pdf(processed_url)
+                log_info(f"URL processed. Local path set to: {local_pdf_path}", tenant_id, "system")
+            except Exception as e:
+                log_error(f"Failed to download PDF from {processed_url}: {e}", tenant_id, "system")
+                raise HTTPException(status_code=500, detail=f"Download failed: {e}")
+        else:
+            # Assume local path
+            if os.path.exists(raw_file_path):
+                local_pdf_path = raw_file_path
+                log_info(f"Using local file path: {local_pdf_path}", tenant_id, "system")
+            else:
+                log_error(f"Local file not found: {raw_file_path}", tenant_id, "system")
+                raise HTTPException(status_code=404, detail=f"Local file not found: {raw_file_path}")
+
+        if not local_pdf_path:
+            raise ValueError("Failed to resolve local_pdf_path")
+
+        # 2. Ingest using local path
+        log_info(f"Calling ingest_pdf_for_tenant with path: {local_pdf_path}", tenant_id, "system")
+        result = ingest_pdf_for_tenant(
+            tenant_id=tenant_id,
+            file_path=local_pdf_path
+        )
         
+        if result["status"] == "success":
+            return result
+        else:
+            log_error(f"ingest_pdf_for_tenant reported failure: {result['message']}", tenant_id, "system")
+            raise HTTPException(status_code=500, detail=result["message"])
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        log_error(f"Unexpected error in load_pdf: {e}", tenant_id, "system")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/whatsapp_webhook")
+async def whatsapp_webhook(request: Request):
+    try:
+        content_type = request.headers.get("content-type", "")
         if "application/json" in content_type:
             payload = await request.json()
-            # Extract basic info (Adapting to common Evolution API / WhatsApp webhook structures)
-            # data.key.remoteJid usually contains the phone number
-            # Evolution API example: payload['data']['key']['remoteJid']
-            # Generic fallback: look for 'sender', 'from', or 'phone'
-            
             message_text = ""
             phone_number = "unknown"
             push_name = "User"
             
-            # Evolution API v2 structure
             if "data" in payload and isinstance(payload["data"], dict):
                 data = payload["data"]
                 phone_number = data.get("key", {}).get("remoteJid", "").split("@")[0]
@@ -77,7 +168,6 @@ async def whatsapp_webhook(request: Request):
                 message_text = data.get("message", {}).get("conversation", "") or \
                                data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
             
-            # Generic/Fallback
             if not message_text:
                 message_text = payload.get("message", {}).get("text") or payload.get("text", "")
             if phone_number == "unknown":
@@ -89,7 +179,6 @@ async def whatsapp_webhook(request: Request):
             employee_id = payload.get("employee_id", DEFAULT_EMPLOYEE_ID)
             
         else:
-            # Handle Form data (request.POST equivalent)
             form_data = await request.form()
             message_text = form_data.get("message", "")
             phone_number = form_data.get("phone_number") or form_data.get("sender") or "anonymous"
@@ -97,24 +186,20 @@ async def whatsapp_webhook(request: Request):
             tenant_id = form_data.get("tenant_id", "DMC")
             employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
         
-        log_info("Starting message processing pipeline", tenant_id, phone_number)
-
         if not message_text:
             return {"status": "ignored", "reason": "empty message"}
 
         response = process_message(
             message_content=message_text,
-            conversation_id=phone_number, # Map to phone number as requested
+            conversation_id=phone_number,
             tenant_id=tenant_id,
             employee_id=employee_id,
             push_name=push_name
         )
         return response
-
     except Exception as e:
         log_error(f"Error in whatsapp_webhook: {e}", "unknown", "unknown")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

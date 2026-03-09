@@ -15,15 +15,15 @@ from langchain_core.outputs import ChatResult, ChatGeneration, ChatGenerationChu
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import Runnable
-
+from pydantic import Field
 logger = logging.getLogger(__name__)
 
 class OllamaService(BaseChatModel):
-    base_url: str
-    username: str
-    password: str
+    base_url: str = Field(default="http://localhost:11434/api/chat")
+    username: str = Field(default="")
+    password: str = Field(default="")
     model: str
-    timeout: float = 60.0
+    timeout: float = Field(default=60.0)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

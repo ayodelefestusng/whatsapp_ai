@@ -55,3 +55,5 @@ def get_model():
         logger.error(f"❌ Unexpected error in get_model: {e}", exc_info=True)
     
     return None
+
+

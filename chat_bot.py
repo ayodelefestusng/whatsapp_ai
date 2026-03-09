@@ -34,15 +34,55 @@ from database import SessionLocal
 from ollama_service import OllamaService
 from base import State, Answer
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
-from llm_handler import get_model
+# from llm_handler import get_model
 from tools import tools, init_sql_agent
 
-
+_llm = None
 # Constants / Fallbacks
 OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 # DEFAULT_AGENT_PROMPT = 
 
+def get_llm_instance(tenant_id=None):
+    """Fetches LLM config using raw SQL."""
+    with SessionLocal() as session:
+        sql = "SELECT name, model FROM customer_llm LIMIT 1"
+        res = session.execute(text(sql)).fetchone()
+        
+        if not res:
+            return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+        
+        name = res[0].lower() if res[0] else "gemini"
+        model_name = res[1] or "gemini-1.5-flash"
+        
+        if name == "gemini":
+            return ChatGoogleGenerativeAI(model=model_name, google_api_key=os.getenv("GOOGLE_API_KEY"))
+        elif "ollama" in name:
+            return OllamaService(model=model_name)
+    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
 
+
+def get_model():
+    """
+    Lazy-loads the model and binds tools only when needed.
+    """
+    global _llm
+    
+    if _llm is not None:
+        return _llm
+
+    try:
+        base_llm = get_llm_instance()
+        if base_llm is not None:
+            _llm = base_llm
+            logger.info("✅ Model and tools initialized successfully.")
+            return _llm
+        
+    except Exception as e:
+        logger.error(f"❌ Unexpected error in get_model: {e}", exc_info=True)
+    
+    return None
+
+# Graph Nodes
 GLOBAL_ROUTING_PROMPT = """You are a helpful AI assistant for ATB Bank. Your task is to analyze the user's request and decide if a tool is needed to answer it.
 
 You have access to the following tools:
@@ -196,128 +236,75 @@ embeddings = None
 def get_embeddings():
     global embeddings
     if embeddings is None:
-        api_key = os.getenv("GOOGLE_API_KEY")
-        embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=api_key)
+        api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            logger.error("❌ GEMINI_API_KEY or GOOGLE_API_KEY not found in environment.")
+            raise ValueError("No API key found for embeddings. Set GEMINI_API_KEY or GOOGLE_API_KEY.")
+        
+        try:
+            embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", google_api_key=api_key)
+            logger.info("✅ Embeddings model initialized.")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Embeddings: {e}")
+            raise
     return embeddings
 
-# ---------------------------------------------------------------------------
-# FAS Vector Store service URLs
-# The Django service at this URL hosts the tenant's document corpus.
-# Set VECTOR_STORE_LOCAL=true in .env to use localhost instead (for local dev).
-# Override URLs via VECTOR_STORE_URL / VECTOR_STORE_LOCAL_URL env vars.
-# ---------------------------------------------------------------------------
-_FAS_REMOTE_URL = os.getenv(
-    "VECTOR_STORE_URL",
-    "http://147.182.194.8:3000/projects/whatsapp-1/app/vectra_app"
-)
-_FAS_LOCAL_URL = os.getenv(
-    "VECTOR_STORE_LOCAL_URL",
-    "http://localhost:3000/projects/whatsapp-1/app/vectra_app"
-)
-_USE_LOCAL_VECTOR = os.getenv("VECTOR_STORE_LOCAL", "false").lower() == "true"
-_VECTOR_STORE_TIMEOUT = int(os.getenv("VECTOR_STORE_TIMEOUT", "10"))
 
 
-def _fetch_docs_from_fas(tenant_id: str) -> list:
+ 
+
+ 
+
+def ingest_pdf_for_tenant(tenant_id: str, file_path: str):
     """
-    Try to fetch documents from the FAS Django service.
-    Expects JSON: {"documents": [{"page_content": "...", "metadata": {...}}, ...]}
-    
-    Fallback: fetch raw tenant data and chunk it locally if standard endpoint is missing.
+    Load a PDF, split into chunks, create a FAISS index, and save to disk.
     """
-    from langchain_core.documents import Document as LCDoc
-    from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-    urls = []
-    # Fetch these from env consistently
-    fas_remote = os.getenv("_FAS_REMOTE_URL") or _FAS_REMOTE_URL
-    fas_local = os.getenv("_FAS_LOCAL_URL") or _FAS_LOCAL_URL
+    tenant_id = str(tenant_id)
+    persist_directory = os.path.join("faiss_dbs", tenant_id)
     
-    urls = []
-    if not _USE_LOCAL_VECTOR:
-        urls.append((fas_remote, "REMOTE"))
-    urls.append((fas_local, "LOCAL"))
-
-    for url, label in urls:
-        logger.info(f"[VectorStore Aluke | Tenant: {tenant_id}] Trying {label} FAS at {url}")
-        try:
-            # Try primary document endpoint
-            resp = requests.get(url, params={"tenant_id": tenant_id}, timeout=_VECTOR_STORE_TIMEOUT)
+    logger.info(f"[VectorStore | Tenant: {tenant_id}] Starting ingestion for {file_path}")
+    
+    try:
+        # 1. Load PDF
+        abs_path = os.path.abspath(file_path)
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Checking path: {file_path} (Absolute: {abs_path})")
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"PDF file not found at: {file_path}")
             
-            # If 404, try the TenantDetailView fallback
-            if resp.status_code == 404:
-                fallback_url = f"{url.rstrip('/')}/customer/TenantDetailView/"
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] Primary failed (404). Trying Fallback: {fallback_url}")
-                resp = requests.get(fallback_url, params={"tenant_id": tenant_id}, timeout=_VECTOR_STORE_TIMEOUT)
+        loader = PyPDFLoader(file_path)
+        documents = loader.load()
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Loaded {len(documents)} pages.")
+        
+        # 2. Split
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        chunks = splitter.split_documents(documents)
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Split into {len(chunks)} chunks.")
+        
+        # 3. Embed and Create FAISS
+        emb = get_embeddings()
+        vector_store = FAISS.from_documents(chunks, emb)
+        
+        # 4. Save to Disk
+        os.makedirs(persist_directory, exist_ok=True)
+        vector_store.save_local(persist_directory)
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Saved index to {persist_directory}")
+        
+        return {"status": "success", "chunk_count": len(chunks), "path": persist_directory}
+        
+    except Exception as e:
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] Ingestion failed: {e}")
+        return {"status": "error", "message": str(e)}
 
-            resp.raise_for_status()
-            data = resp.json()
-
-            # Case A: Standard documents list
-            if "documents" in data:
-                raw_docs = data.get("documents", [])
-                if not isinstance(raw_docs, list):
-                    logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: 'documents' is not a list.")
-                    continue
-                docs = [
-                    LCDoc(page_content=d["page_content"], metadata=d.get("metadata", {}))
-                    for d in raw_docs
-                    if isinstance(d, dict) and d.get("page_content")
-                ]
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: fetched {len(docs)} pre-built docs.")
-                return docs
-
-            # Case B: Raw Tenant Detail (TenantDetailView)
-            elif "tenant_text" in data:
-                text = data.get("tenant_text") or ""
-                doc_text = data.get("tenant_document") or ""
-                combined = f"{text}\n\n{doc_text}".strip()
-                
-                if not combined:
-                    logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: Tenant found but no text data available.")
-                    continue
-
-                splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-                chunks = splitter.split_text(combined)
-                docs = [LCDoc(page_content=c, metadata={"source": "fas_detail_view"}) for c in chunks]
-                logger.info(f"[VectorStore | Tenant: {tenant_id}] {label}: Local chunking successful. {len(docs)} docs created.")
-                return docs
-
-            else:
-                logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: Unrecognized response format.")
-                continue
-
-        except requests.exceptions.ConnectionError:
-            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: connection refused at {url}.")
-        except requests.exceptions.Timeout:
-            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: timed out after {_VECTOR_STORE_TIMEOUT}s.")
-        except requests.exceptions.HTTPError as e:
-            status = e.response.status_code if e.response is not None else "?"
-            logger.warning(f"[VectorStore | Tenant: {tenant_id}] {label}: HTTP {status} — {e}.")
-        except Exception as e:
-            logger.error(f"[VectorStore | Tenant: {tenant_id}] {label}: unexpected error — {e}.")
-
-    logger.warning(f"[VectorStore | Tenant: {tenant_id}] All FAS endpoints failed.")
-    return []
- 
-
- 
 
 def initialize_vector_store(tenant_id: str):
     """
     Fetch and return a FAISS vector store for the given tenant.
-    FastAPI is read-only — it never creates or saves a vector store.
-
-    Resolution order:
-      1. Fetch documents from remote Django FAS service → build in-memory FAISS.
-      2. Fetch documents from localhost FAS service (fallback / local dev).
-      3. Load a previously cached FAISS index from disk (faiss_dbs/<tenant_id>/).
-      4. Return (None, info) if everything fails — no empty store is created.
+    Loads ONLY from disk cache (faiss_dbs/<tenant_id>/).
     """
     tenant_id = str(tenant_id)
     persist_directory = os.path.join("faiss_dbs", tenant_id)
 
-    logger.info(f"[VectorStore | Tenant: {tenant_id}] Initializing (read-only).")
+    logger.info(f"[VectorStore | Tenant: {tenant_id}] Initializing from disk (read-only).")
 
     # --- Step 1: Embeddings ---
     try:
@@ -327,36 +314,24 @@ def initialize_vector_store(tenant_id: str):
         logger.error(f"[VectorStore | Tenant: {tenant_id}] Embeddings init failed: {e}")
         return None, {"status": "error", "message": f"Embeddings init failed: {e}"}
 
-    # --- Step 2: Try to fetch docs from FAS service (remote → local) ---
+    # --- Step 2: Try to load from disk cache ---
     try:
-        docs = _fetch_docs_from_fas(tenant_id)
-    except Exception as e:
-        logger.error(f"[VectorStore | Tenant: {tenant_id}] _fetch_docs_from_fas raised: {e}")
-        docs = []
-
-    if docs:
-        try:
-            vector_store = FAISS.from_documents(docs, emb)
-            logger.info(f"[VectorStore | Tenant: {tenant_id}] In-memory FAISS built from {len(docs)} FAS docs.")
-            return vector_store, {"status": "success", "source": "fas_service", "doc_count": len(docs)}
-        except Exception as e:
-            logger.error(f"[VectorStore | Tenant: {tenant_id}] Failed to build FAISS from FAS docs: {e}")
-
-    # --- Step 3: Fall back to disk cache (built during a previous session or by Django) ---
-    try:
+        if not os.path.exists(persist_directory):
+            raise FileNotFoundError(f"Directory {persist_directory} does not exist.")
+            
         vector_store = FAISS.load_local(persist_directory, emb, allow_dangerous_deserialization=True)
         doc_count = vector_store.index.ntotal if hasattr(vector_store, "index") else "unknown"
-        logger.info(f"[VectorStore | Tenant: {tenant_id}] Loaded from disk cache. index_size={doc_count}")
-        return vector_store, {"status": "success", "source": "disk_cache", "doc_count": doc_count}
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Loaded successfully. index_size={doc_count}")
+        return vector_store, {"status": "success", "source": "disk", "doc_count": doc_count}
     except FileNotFoundError:
         logger.warning(
-            f"[VectorStore | Tenant: {tenant_id}] No disk cache at {persist_directory} and FAS unavailable. "
-            "pdf_retrieval_tool will be disabled until the Django service is reachable."
+            f"[VectorStore | Tenant: {tenant_id}] No disk index found at {persist_directory}. "
+            "Use /load_pdf to ingest documents for this tenant."
         )
     except Exception as e:
-        logger.error(f"[VectorStore | Tenant: {tenant_id}] Failed to load disk cache: {e}")
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] Failed to load local index: {e}")
 
-    return None, {"status": "not_found", "message": "FAS service unreachable and no disk cache found."}
+    return None, {"status": "not_found", "message": "No vector store index found on disk."}
 
 
 # Model/Service Name Variables - Moved to llm_handler.py
@@ -738,19 +713,26 @@ def assistant_node(state: State, config: RunnableConfig):
     if messages and isinstance(messages[-1], ToolMessage):
         logger.info("Last message was a tool result. LLM will now generate the final JSON response based on the tool's output.")
 
-    print(f"!!! TRACE: assistant_node starting. Messages: {len(messages)}", flush=True)
+    # logger.info(f"!!! TRACE: assistant_node starting. Messages: {len(messages)}", flush=True)
+
+    logger.info(f"!!! TRACE: assistant_node starting. Messages: {len(messages)}")
     try:
         # 1. Capture the raw response WITH bind_tools
         # Use the global 'llm' instance directly to avoid redundant/unstable DB calls inside the graph
+        logger.info(f"Messages before assistant processing: {messages}")
         llm = get_model() 
+        logger.info(f"LLM instance: {llm}", tenant_id, conversation_id)
         if not llm:
             logger.error("LLM instance is not available. Returning error response.", tenant_id, conversation_id)
             return {"messages": [AIMessage(content=json.dumps({"tool": "none", "answer": "Error: LLM not available."}))]}
-        
+        logger.info(f"Tools: {tools}", tenant_id, conversation_id)
         llm_with_tools = llm.bind_tools(tools)
+        logger.info(f"LLM with tools: {llm_with_tools}", tenant_id, conversation_id)
         safe_messages = clean_message_history(state["messages"])
+        logger.info(f"Safe messages: {safe_messages}", tenant_id, conversation_id)
         try:
             response = llm_with_tools.invoke([SystemMessage(content=system_prompt)] + safe_messages)
+            logger.info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
         except Exception as e:
             log_error(f"LLM invoke failed: {e}", tenant_id, conversation_id)
             return {"messages": [AIMessage(content=json.dumps({"answer": "I'm sorry, I'm experiencing connectivity issues. Please try again later."}))]}
@@ -812,6 +794,157 @@ def build_graph(tenant_id: str, conversation_id: str, checkpointer=None):
     log_info("Edge added from tool_node to assistant_node.", tenant_id, conversation_id)
 
     return workflow.compile(checkpointer=checkpointer)
+
+
+
+def process_message(message_content: str, conversation_id: str, tenant_id: str, employee_id: Optional[str] = None, push_name: str = "User"):
+    # Fallback for employee_id
+    if not employee_id:
+        employee_id = DEFAULT_EMPLOYEE_ID
+    log_info("Starting message processing pipeline", tenant_id, conversation_id)
+    log_info(f"Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
+    
+    vector_store_result = initialize_vector_store(tenant_id)
+
+    # Unpack based on your initialize_vector_store return (vector_store, info_dict)
+    tenant_vector_store, vs_info = (
+        vector_store_result
+        if isinstance(vector_store_result, tuple)
+        else (vector_store_result, {})
+    )
+
+    if tenant_vector_store is not None:
+        try:
+            document_count = tenant_vector_store.index.ntotal
+            log_info(f"Vector store document count: {document_count}", tenant_id, conversation_id)
+        except AttributeError:
+            log_error("Unexpected vector store structure.", tenant_id, conversation_id)
+    else:
+        log_error("Vector store is None.", tenant_id, conversation_id)
+        
+    prompt_id = None
+    db_uri = os.getenv("DATABASE_URL")
+    p_res = None
+
+    try:
+        with SessionLocal() as session:
+            # 1. Fetch Tenant AI config
+            ta_sql = """
+                SELECT prompt_template_id, db_uri 
+                FROM customer_tenant_ai 
+                WHERE tenant_id = (SELECT id FROM org_tenant WHERE code = :code)
+            """
+            ta_item = session.execute(text(ta_sql), {"code": tenant_id}).fetchone()
+            
+            prompt_id = ta_item[0] if ta_item else None
+            db_uri = ta_item[1] if ta_item and ta_item[1] else db_uri
+            
+            # 2. Fetch Prompt
+            if prompt_id:
+                p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE id = :pid"
+                p_res = session.execute(text(p_sql), {"pid": prompt_id}).fetchone()
+            else:
+                p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE name = 'standard' LIMIT 1"
+                p_res = session.execute(text(p_sql)).fetchone()
+    except Exception as e:
+        log_error(f"Database configuration fetch failed: {e}. Using defaults.", tenant_id, conversation_id)
+
+    tenant_config_dict = {
+        "tenant_id": tenant_id,
+        "employee_id": employee_id,
+        "db_uri": db_uri,
+        "push_name": push_name,
+        "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
+        "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
+        "tool_intent_map": p_res[2] if p_res else tool_guide,
+        "vector_store": tenant_vector_store,
+    }
+    # --- Logging Connectivity confirmation ---
+    # 1. Database Connectivity Check
+    db_connected = False
+    record_found = False
+    try:
+        with SessionLocal() as check_session:
+            # Check for a simple record to confirm DB connectivity and data presence
+            res = check_session.execute(text("SELECT id, name, code FROM org_tenant WHERE code = :code LIMIT 1"), {"code": tenant_id}).fetchone()
+            db_connected = True
+            if res:
+                record_found = True
+                log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
+                # Fetch a sample record from another table to be double sure - e.g. Prompt or LeaveType
+                sample = check_session.execute(text("SELECT id, name FROM customer_prompt LIMIT 1")).fetchone()
+                if sample:
+                    log_info(f"📊 Sample Prompt Record: ID={sample[0]}, Name='{sample[1]}'", tenant_id, conversation_id)
+            else:
+                log_warning(f"⚠️ DB Connected, but NO tenant record found for '{tenant_id}'.", tenant_id, conversation_id)
+    except Exception as e:
+        log_error(f"❌ DB Connectivity check failed: {e}", tenant_id, conversation_id)
+
+    # 2. FAS URL Connectivity Check
+    # fas_url = os.getenv("_FAS_REMOTE_URL") or os.getenv("VECTOR_STORE_URL")
+# 1. Define the base path using the current script's location
+# This ensures it always looks in the correct 'faiss_dbs' folder regardless of where you run it from
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    persist_directory = os.path.join(base_dir, "faiss_dbs", tenant_id)
+
+    # 2. Check the directory using OS-native methods
+    try:
+        if os.path.isdir(persist_directory):
+            log_info(f"✅ FAS Directory confirmed at: {persist_directory}", tenant_id, conversation_id)
+            
+            # Check for the existence of the actual index files to be extra safe
+            index_file = os.path.join(persist_directory, "index.faiss")
+            if os.path.exists(index_file):
+                log_info(f"✅ Index file found: {index_file}", tenant_id, conversation_id)
+            else:
+                log_error(f"⚠️ FAS Directory exists but index.faiss is missing: {persist_directory}", tenant_id, conversation_id)
+        else:
+            log_error(f"❌ FAS Directory not found at: {persist_directory}", tenant_id, conversation_id)
+
+    except Exception as e:
+        log_error(f"❌ Unexpected error accessing directory {persist_directory}: {e}", tenant_id, conversation_id)
+        
+        
+    log_info(f"Tenant config prepared. DB URI present: {bool(db_uri)}", tenant_id, conversation_id)
+        
+    with PostgresSaver.from_conn_string(db_uri) as checkpointer:
+    # with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
+        checkpointer.setup()
+        app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
+        
+        config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
+        initial_state = {
+            "messages": [HumanMessage(content=message_content)],
+            "tenant_config": tenant_config_dict
+        }
+        
+        final_state = app.invoke(initial_state, config=config)
+        
+        # Correctly access the final answer from the messages in the state
+        messages = final_state.get("messages", [])
+        if messages:
+            current_answer = messages[-1].content
+        else:
+            current_answer = ""
+            
+        logger.info(f"LLM response Process message : {current_answer}")
+        metadata = final_state.get("metadata", {})
+        
+        if current_answer:
+            if isinstance(current_answer, dict) and "answer" in current_answer:
+                current_answer = current_answer["answer"]
+                
+            return {
+                "answer": current_answer,
+                "metadata": metadata,
+                "visualization_image": final_state.get("visualization_image"),
+                "visualization_analysis": final_state.get("visualization_analysis"),
+            }
+        else:
+            fallback = "I apologize, but I encountered an internal error processing your request."
+            logger.info(f"LLM Response Fallback: {fallback}")
+            return {"answer": fallback, "metadata": {}, "visualization_image": None, "visualization_analysis": None}
+
 
 
 def assistant_nodev1(state: State, config: RunnableConfig):
@@ -1077,138 +1210,5 @@ def assistant_nodev1(state: State, config: RunnableConfig):
 
         # return {"messages": [final_answer]}
 
-
-
-
-def process_message(message_content: str, conversation_id: str, tenant_id: str, employee_id: Optional[str] = None, push_name: str = "User"):
-    # Fallback for employee_id
-    if not employee_id:
-        employee_id = DEFAULT_EMPLOYEE_ID
-    log_info("Starting message processing pipeline", tenant_id, conversation_id)
-    log_info(f"Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
-    
-    vector_store_result = initialize_vector_store(tenant_id)
-
-    # Unpack based on your initialize_vector_store return (vector_store, info_dict)
-    tenant_vector_store, vs_info = (
-        vector_store_result
-        if isinstance(vector_store_result, tuple)
-        else (vector_store_result, {})
-    )
-
-    if tenant_vector_store is not None:
-        try:
-            document_count = tenant_vector_store.index.ntotal
-            log_info(f"Vector store document count: {document_count}", tenant_id, conversation_id)
-        except AttributeError:
-            log_error("Unexpected vector store structure.", tenant_id, conversation_id)
-    else:
-        log_error("Vector store is None.", tenant_id, conversation_id)
-        
-    with SessionLocal() as session:
-        # 1. Fetch Tenant AI config
-        ta_sql = """
-            SELECT prompt_template_id, db_uri 
-            FROM customer_tenant_ai 
-            WHERE tenant_id = (SELECT id FROM org_tenant WHERE code = :code)
-        """
-        ta_res = session.execute(text(ta_sql), {"code": tenant_id}).fetchone()
-        
-        prompt_id = ta_res[0] if ta_res else None
-        db_uri = ta_res[1] if ta_res else None
-        
-        # 2. Fetch Prompt
-        if prompt_id:
-            p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE id = :pid"
-            
-            log_info(f"Agent Prompt Fetched from db: {p_sql}", tenant_id, conversation_id)
-            p_res = session.execute(text(p_sql), {"pid": prompt_id}).fetchone()
-        else:
-            # Fallback to 'standard'
-            p_sql = "SELECT agent_prompt, \"GLOBAL_FINAL_ANSWER_PROMPT\", \"TOOL_INTENT_MAP\" FROM customer_prompt WHERE name = 'standard' LIMIT 1"
-            log_error(f"Fall back Agent Prompt : {p_sql}", tenant_id, conversation_id)
-            p_res = session.execute(text(p_sql)).fetchone()
-
-        tenant_config_dict = {
-            "tenant_id": tenant_id,
-            "employee_id": employee_id,
-            "db_uri": db_uri,
-            "push_name": push_name,
-            "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
-            "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
-            "tool_intent_map": p_res[2] if p_res else tool_guide,
-            # Vector store loaded from disk (built by Django service)
-            "vector_store": tenant_vector_store,
-        }
-    # --- Logging Connectivity confirmation ---
-    # 1. Database Connectivity Check
-    db_connected = False
-    record_found = False
-    try:
-        with SessionLocal() as check_session:
-            # Check for a simple record to confirm DB connectivity and data presence
-            res = check_session.execute(text("SELECT id, name, code FROM org_tenant WHERE code = :code LIMIT 1"), {"code": tenant_id}).fetchone()
-            db_connected = True
-            if res:
-                record_found = True
-                log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
-                # Fetch a sample record from another table to be double sure - e.g. Prompt or LeaveType
-                sample = check_session.execute(text("SELECT id, name FROM customer_prompt LIMIT 1")).fetchone()
-                if sample:
-                    log_info(f"📊 Sample Prompt Record: ID={sample[0]}, Name='{sample[1]}'", tenant_id, conversation_id)
-            else:
-                log_warning(f"⚠️ DB Connected, but NO tenant record found for '{tenant_id}'.", tenant_id, conversation_id)
-    except Exception as e:
-        log_error(f"❌ DB Connectivity check failed: {e}", tenant_id, conversation_id)
-
-    # 2. FAS URL Connectivity Check
-    fas_url = os.getenv("_FAS_REMOTE_URL") or os.getenv("VECTOR_STORE_URL")
-    if fas_url:
-        try:
-            # Simple HEAD request to check availability
-            response = requests.head(fas_url, timeout=5)
-            log_info(f"✅ FAS Connectivity: {fas_url} returned {response.status_code}", tenant_id, conversation_id)
-        except Exception as e:
-            log_error(f"❌ FAS Connectivity failed for {fas_url}: {e}", tenant_id, conversation_id)
-
-    log_info(f"Tenant config prepared. DB URI present: {bool(db_uri)}", tenant_id, conversation_id)
-        
-    with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as checkpointer:
-    # with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
-        checkpointer.setup()
-        app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
-        
-        config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
-        initial_state = {
-            "messages": [HumanMessage(content=message_content)],
-            "tenant_config": tenant_config_dict
-        }
-        
-        final_state = app.invoke(initial_state, config=config)
-        
-        # Correctly access the final answer from the messages in the state
-        messages = final_state.get("messages", [])
-        if messages:
-            current_answer = messages[-1].content
-        else:
-            current_answer = ""
-            
-        logger.info(f"LLM response Process message : {current_answer}")
-        metadata = final_state.get("metadata", {})
-        
-        if current_answer:
-            if isinstance(current_answer, dict) and "answer" in current_answer:
-                current_answer = current_answer["answer"]
-                
-            return {
-                "answer": current_answer,
-                "metadata": metadata,
-                "visualization_image": final_state.get("visualization_image"),
-                "visualization_analysis": final_state.get("visualization_analysis"),
-            }
-        else:
-            fallback = "I apologize, but I encountered an internal error processing your request."
-            logger.info(f"LLM Response Fallback: {fallback}")
-            return {"answer": fallback, "metadata": {}, "visualization_image": None, "visualization_analysis": None}
 
 

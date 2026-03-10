@@ -37,8 +37,10 @@ from base import State, Answer
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
 from tools import tools, init_sql_agent
-
-
+OLLAMA_BASE_URL = "https://ai.notchhr.io/api/chat/local"
+OLLAMA_USERNAME = "ai-user"
+OLLAMA_PASSWORD = "x2GS7jEF@#2T"
+OLLAMA_MODEL = "gpt-oss-safeguard:20b"
 GEMINI_INIT= os.getenv("GEMINI_INIT", "google_genai:gemini-flash-latest")
 
 # Constants / Fallbacks
@@ -47,13 +49,17 @@ GEMINI_INIT= os.getenv("GEMINI_INIT", "google_genai:gemini-flash-latest")
 llm_fallback = init_chat_model(GEMINI_INIT)
 model = llm_fallback  # Consistent naming for the primary LLM
 _llm = None
-
-
-_llm = None
-
-        
-def get_llm_instance(tenant_id=None):
-    """Fetches LLM config using raw SQL and initializes dynamically."""
+def get_llm_instance(llm_config=None):
+    """
+    Returns an LLM instance based on the provided configuration or global DB setting.
+    
+    Supported LLM types:
+    - gemini: Google Gemini API
+    - ollama: Local Ollama instance
+    - ollama_cloud: Ollama Cloud API (requires OLLAMA_API_KEY)
+    """
+    # If explicit config passed, use it. Otherwise fetch global if needed.
+    # Note: 'llm_config' here is expected to be a Django ORM object or None.
     with SessionLocal() as session:
         sql = "SELECT name, model FROM customer_llm LIMIT 1"
         res = session.execute(text(sql)).fetchone()
@@ -67,13 +73,13 @@ def get_llm_instance(tenant_id=None):
         model_name = res[1] or "gemini-1.5-flash"
         
         if "gemini" in name:
-            return ChatGoogleGenerativeAI(model=model_name, google_api_key=os.getenv("GOOGLE_API_KEY"))
+            return ChatGoogleGenerativeAI(model=model_name, api_key=os.getenv("GOOGLE_API_KEY"))
             
         elif "ollama" in name:
             # Initialize OllamaService without local network parameters
             return OllamaService(model=model_name)
             
-    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GOOGLE_API_KEY"))
+    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
 
 def get_model():
     """
@@ -270,6 +276,7 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
         - Document Context: {pdf_content}
         - Web Context: {web_content}
         - SQL Result: {sql_result}
+        - Visualization Analysis: {visualization_analysis}
         
 
         Tool Guide:{tool_intent_map}
@@ -496,10 +503,13 @@ _llm = None
 
 GLOBAL_SCOPE = "GLOBAL"
 NO_CONVO = "N/A"
-def should_continue(state: State) -> Literal["tool_node", END]:
+def should_continue(state: State) -> Literal["tool_node", "__end__"]:
     """Decide if we should continue the loop or stop based upon whether the LLM made a tool call"""
 
-    tenant_id = state.get("tenant_config", {}).get("tenant_id", "unknown")
+    if state is None:
+        return END
+    tenant_config = state.get("tenant_config", {}) or {}
+    tenant_id = tenant_config.get("tenant_id", "unknown")
     conversation_id = state.get("conversation_id", "unknown")
     log_info("Evaluating whether to continue or stop.", tenant_id, conversation_id)
 
@@ -643,8 +653,18 @@ def extract_final_answer(response):
         except json.JSONDecodeError:
             pass
 
-        # Try searching for JSON-like blocks if direct parse failed
-        json_blocks = re.findall(r"\{.*?\}", content_clean, flags=re.DOTALL)
+        # Try matching the largest possible JSON object first (greedy)
+        greedy_match = re.search(r"(\{.*\})", content_clean, re.DOTALL)
+        if greedy_match:
+            try:
+                obj = json.loads(greedy_match.group(1))
+                if isinstance(obj, dict) and "answer" in obj:
+                    return obj["answer"]
+            except json.JSONDecodeError:
+                pass
+
+        # Try searching for JSON-like blocks as a fallback (non-greedy)
+        json_blocks = re.findall(r"(\{.*?\})", content_clean, flags=re.DOTALL)
         for block in json_blocks:
             try:
                 obj = json.loads(block)
@@ -739,6 +759,21 @@ def normalize_tool_calls(response):
                     "id": f"call_{uuid.uuid4().hex[:12]}",
                     "type": "tool_call"
                 })
+            elif isinstance(obj, dict) and "visualization" in obj and isinstance(obj["visualization"], dict):
+                 viz = obj["visualization"]
+                 v_name = viz.get("tool") or viz.get("name")
+                 if v_name:
+                    logger.info(f"Successfully extracted tool call from visualization key: {v_name}")
+                    v_args = viz.get("tool_input") or viz.get("args") or viz.get("parameters")
+                    if not v_args or not isinstance(v_args, dict):
+                        v_args = {k: v for k, v in viz.items() if k not in ("tool", "name")}
+                    
+                    tool_calls.append({
+                        "name": v_name,
+                        "args": v_args,
+                        "id": f"call_{uuid.uuid4().hex[:12]}",
+                        "type": "tool_call"
+                    })
             elif isinstance(obj, dict) and "tool_call" in obj and isinstance(obj["tool_call"], dict):
                 logger.info(f"Successfully extracted tool_call: {obj['tool_call'].get('name')}")
                 tc = obj["tool_call"]
@@ -800,15 +835,16 @@ def assistant_node(state: State, config: RunnableConfig):
     pdf_content = state.get("pdf_content", "None")
     web_content = state.get("web_content", "None")
     sql_result = state.get("sql_result", "None")
+    visualization_analysis = state.get("visualization_analysis", "No visualization generated yet.")
     tool_intent_map = ((state.get("tenant_config") or {}).get("tool_intent_map")
   or tool_guide
-   )
+    )
 
     push_name = tenant_config.get("push_name", "User")
     # global_answer_prompt acts as the persona/intro section of system_prompt.
     # Falls back to GLOBAL_FINAL_ANSWER_PROMPT if not set in the DB.
     global_answer_prompt = (
-        tenant_config.get("global_answer_prompt1")
+        tenant_config.get("global_answer_prompt")
         or GLOBAL_FINAL_ANSWER_PROMPT
     )
     
@@ -817,7 +853,7 @@ def assistant_node(state: State, config: RunnableConfig):
     # agent_prompt = tenant_config.get("agent_prompt") or None
 
     # Fetch the prompt template
-    agent_prompt = tenant_config.get("agent_prompt1",GLOBAL_FINAL_ANSWER_PROMPT)
+    agent_prompt = tenant_config.get("agent_prompt",GLOBAL_FINAL_ANSWER_PROMPT)
 
 
 
@@ -837,6 +873,7 @@ def assistant_node(state: State, config: RunnableConfig):
             web_content=web_content,
             # Using leave_application for the state result as requested
             sql_result=sql_result,
+            visualization_analysis=visualization_analysis,
             status_summary=status_summary,
             tool_intent_map=tool_intent_map,
             tool_descriptions=tool_descriptions
@@ -1117,269 +1154,4 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             fallback = "I apologize, but I encountered an internal error processing your request."
             logger.info(f"LLM Response Fallback: {fallback}")
             return {"answer": fallback, "metadata": {}}
-
-def assistant_nodev1(state: State, config: RunnableConfig):
-    # Fix for lint: "get" is not a known attribute of "None"
-    if state is None:
-        state = cast(State, {}) 
-        
-    configurable = config.get("configurable", {})
-    tenant_id = configurable.get("tenant_id", "unknown")
-    log_info(f"Assistant node triggered for tenant: {tenant_id}", tenant_id, conversation_id)
-
-    tenant_config = state.get("tenant_config", {}) or {}
-    push_name = tenant_config.get("push_name", "User")
-    
-    tenant_id = config["configurable"].get("tenant_id", "unknown")
-    conversation_id = config["configurable"].get("thread_id", "unknown")
-    log_info(f"Assistant node triggered for tenant: {tenant_id}", tenant_id, conversation_id)
-
-    # --- Resolve DB-sourced prompts with hardcoded fallbacks ---
-    tenant_config = state.get("tenant_config") or {}
-    employee_id = {state.get('employee_id')}
-    current_year = datetime.now().year
-    previous_year = current_year - 1
-    current_date_str = datetime.now().strftime("%Y-%m-%d")
-    status_summary = state.get("status_summary", "No active application.")
-    pdf_content = state.get("pdf_content", "None")
-    web_content = state.get("web_content", "None")
-    sql_result = state.get("sql_result", "None")
-
-    # global_answer_prompt acts as the persona/intro section of system_prompt.
-    # Falls back to GLOBAL_FINAL_ANSWER_PROMPT if not set in the DB.
-    global_answer_prompt = (
-        tenant_config.get("global_answer_prompt")
-        or GLOBAL_FINAL_ANSWER_PROMPT
-    )
-    agent_prompt = tenant_config.get("agent_prompt",GLOBAL_FINAL_ANSWER_PROMPT)
-
-    if agent_prompt:
-        system_prompt = agent_prompt.format(
-            ID=employee_id,
-            current_year=current_year,
-            previous_year=previous_year,
-            current_date_str=current_date_str,
-            pdf_content=pdf_content,
-            web_content=web_content,
-            # Using leave_application for the state result as requested
-            sql_result=sql_result,
-            status_summary=status_summary
-        )
-    else:
-        # Handle the case where no prompt is found
-        system_prompt = "Default fallback prompt or error handling logic here."
-
-       # 1. DYNAMIC CONTEXT PREPARATION (HR/Leave Status)
-    leave_app = state.get("leave_application")
-    status_summary = "No active application."
-    if leave_app:
-        status = leave_app.get("status")
-        if status == "success":
-            status_summary = f"Application {leave_app.get('application_id')} completed."
-        elif status == "prepared":
-            resumption = leave_app.get("details", {}).get("resumptionDate", "TBD")
-            status_summary = f"Application prepared. Action required: Confirm resumption date {resumption}."
-        elif status == "error":
-            status_summary = f"Process error: {leave_app.get('message')}"
-
-
-
-    # agent_prompt = tenant_config.get("agent_prompt") or DEFAULT_AGENT_PROMPT
-    # final_answer_prompt = tenant_config.get("final_answer_prompt") or DEFAULT_FINAL_ANSWER_PROMPT
-    
-    # Static system prompt instruction for pushName
-    greeting_instruction = f"Always greet or address the user using their name: {push_name}, if they are starting a conversation or if appropriate."
-    logger.info(f"Messages greeting_instruction: {greeting_instruction}")
-    llm = get_llm_instance(tenant_id)
-    logger.info(f"Messages llm: {llm}")
-    messages = state.get("messages", [])
-    logger.info(f"Messages messages: {messages}")
-
-    llm_with_tools = llm.bind_tools(tools)
-    
-  
-    if messages and isinstance(messages[-1], ToolMessage):
-        logger.info("Last message was a tool result. Preparing to generate final answer with structured output.")
-        # Generate structured final answer
-        logger.info("Generating final structured answer.")
-        structured_llm = llm.with_structured_output(Answer)
-        try:
-            # final_answer_obj = structured_llm.invoke([SystemMessage(content=system_prompt)] + messages)
-            unstructured_response = llm.invoke([SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}")] + messages)
-            
-            if hasattr(unstructured_response, "tool_calls") and unstructured_response.tool_calls:
-                logger.info(f"Tool calls foundAtejjd: {unstructured_response.tool_calls}")
-                return {"messages": [unstructured_response]}  # keep the AIMessage intact
-            
-        except Exception as e:
-            log_error(f"Structured output generation failed: {e}", tenant_id, conversation_id)
-            unstructured_response = None
-
-        if unstructured_response:
-            # Attach chart if present in state
-            viz_result = state.get("visualization_result")
-            if viz_result and "image_base64" in viz_result:
-                unstructured_response.chart_base64 = viz_result["image_base64"]
-
-            return {
-                "messages": [AIMessage(content=unstructured_response.content)],
-                # "leave_application": unstructured_response.dict(),
-                # "metadata": {"sentiment": unstructured_response.sentiment, "sources": unstructured_response.source}
-            }
-        else:
-            # Fallback to extract from raw invoke if structured fails
-            logger.warning("Falling back to raw extraction in assistant_node.")
-            # response = llm.invoke([SystemMessage(content=system_prompt)] + messages)
-            response = llm.invoke([SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}")] + messages)
-            final_answer = extract_final_answer(response)
-            return {"messages": [AIMessage(content=final_answer)]}
-
-    llm_with_tools = llm.bind_tools(tools)
-    logger.info("Invoking LLM with tools for assistant response generation.")
-    # Inside assistant_node, right after the LLM call:
-
-    
-    system_msg = SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}")
-    # system_msg = SystemMessage(content=f"{agent_prompt}\n\n{greeting_instruction}\n\n{final_answer_prompt}")
-    response = llm_with_tools.invoke([system_msg] + messages)
-    
-    # if isinstance(response.content, str) and not response.tool_calls:
-    #     json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
-    #     if json_match:
-    #         try:
-    #             parsed = json.loads(json_match.group())
-    #             t_name = parsed.get("name") or parsed.get("tool")
-    #             if t_name:
-    #                 response.tool_calls = [{"name": t_name, "args": parsed.get("args", {}), "id": str(uuid.uuid4()), "type": "tool_call"}]
-    #         except: pass
-
-    # return {"messages": [response]}
-      # 2. Check for "Embedded" Tool Calls (The Ollama Fix)
-    if isinstance(response.content, str) and not response.tool_calls:
-        try:
-            # Search for JSON-like patterns in the text
-            json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
-            if json_match:
-                parsed = json.loads(json_match.group())
-                
-                # Map various LLM hallucinations to standard LangChain format
-                t_name = parsed.get("tool") or parsed.get("name") or parsed.get("tool_name")
-                t_args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters") or {}
-                
-                if t_name:
-                    logger.info(f"Fixed: Extracted '{t_name}' from raw text content.")
-                    # IMPORTANT: Manually populate the tool_calls attribute
-                    response.tool_calls = [{
-                        "name": t_name,
-                        "args": t_args,
-                        "id": f"call_{uuid.uuid4().hex[:12]}",
-                        "type": "tool_call"
-                    }]
-        except Exception as e:
-            logger.error(f"Manual parsing failed: {e}")
-
-    # 3. Now LangGraph will see response.tool_calls and route to tool_node
-    if response.tool_calls:
-        return {"messages": [response]}
-
-    
-    # 2. Check for "Embedded" Tool Calls (The Ollama Fix)
-    if isinstance(response.content, str) and not response.tool_calls:
-        try:
-            # Search for JSON-like patterns in the text
-            json_match = re.search(r"\{.*\}", response.content, re.DOTALL)
-            if json_match:
-                parsed = json.loads(json_match.group())
-                
-                # Map various LLM hallucinations to standard LangChain format
-                t_name = parsed.get("tool") or parsed.get("name") or parsed.get("tool_name")
-                t_args = parsed.get("arguments") or parsed.get("args") or parsed.get("parameters") or {}
-                
-                if t_name:
-                    logger.info(f"Fixed: Extracted '{t_name}' from raw text content.")
-                    # IMPORTANT: Manually populate the tool_calls attribute
-                    response.tool_calls = [{
-                        "name": t_name,
-                        "args": t_args,
-                        "id": f"call_{uuid.uuid4().hex[:12]}",
-                        "type": "tool_call"
-                    }]
-        except Exception as e:
-            logger.error(f"Manual parsing failed: {e}")
-        
-    #     # 3. Now LangGraph will see response.tool_calls and route to tool_node
-        if response.tool_calls:
-            return {"messages": [response]}
-        if hasattr(response, "tool_calls") and response.tool_calls:
-            logger.info(f"Tool calls foundAtejjdy: {response.tool_calls}")
-            return {"messages": [response]}  # keep the AIMessage intact
-        
-
-    #     # Check 2: JSON-wrapped/Embedded Tool Calls (The "Ollama Fallback")
-        if isinstance(response.content, str):
-            try:
-                # Look for JSON blocks even if mixed with text
-                json_blocks = re.findall(r"\{.*?\}", response.content, flags=re.DOTALL)
-                extracted_calls = []
-                
-                for block in json_blocks:
-                    try:
-                        parsed = json.loads(block)
-                        if isinstance(parsed, dict):
-                            # Support various formats:
-                            # 1. Standard {'name': ..., 'args': ...}
-                            # 2. Ollama Cloud {'tool': ..., 'parameters': ...}
-                            # 3. List wrapper {'tool_calls': [...]}
-                            
-                            if "tool_calls" in parsed and isinstance(parsed["tool_calls"], list):
-                                extracted_calls.extend(parsed["tool_calls"])
-                            else:
-                                extracted_calls.append(parsed)
-                    except:
-                        continue
-                
-                if extracted_calls:
-                    valid_calls = []
-                    for call in extracted_calls:
-                        # Detect tool name from various possible keys
-                        t_name = call.get("name") or call.get("tool") or call.get("tool_name")
-                        if not t_name: continue
-                        
-                        # Detect arguments from various possible keys
-                        t_args = call.get("args") or call.get("parameters") or call.get("arguments") or {}
-                        
-                        valid_calls.append({
-                            "name": t_name,
-                            "args": t_args,
-                            "id": call.get("id") or str(uuid.uuid4()),
-                            "type": "tool_call"
-                        })
-                    
-                    if valid_calls:
-                        logger.info(f"Manually extracted {len(valid_calls)} tool calls from mixed content.")
-                        response.tool_calls = valid_calls
-                        # Also clean up the content to keep only the tool call if it's primarily a tool request
-                        return {"messages": [response]}
-            except Exception as e:
-                logger.error(f"Failed to robustly parse tool calls from content: {e}")
-
-    #     # --- END OF NEW PARSING ---
-
-        final_answer = extract_final_answer(response)
-        logger.info(f"LLM response Assitant Node: {final_answer}")
-        return {"messages": [AIMessage(content=final_answer)]}
-
-
-
-
-        # final_answer = extract_final_answer(response)
-        # logger.info(f"LLM response Assitant Node: {final_answer}")
-        # logger.info(f"Final Output Raw Aliko: {messages}")
-        
-        # return {"messages": [AIMessage(content=final_answer)]}
-
-
-        # return {"messages": [final_answer]}
-
-
 

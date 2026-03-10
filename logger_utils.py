@@ -18,7 +18,7 @@ if not logger.handlers:
         format="%(asctime)s [%(levelname)s] %(name)s:%(funcName)s:%(lineno)d - %(message)s",
         handlers=[
             logging.StreamHandler(sys.stdout),
-            RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=5, encoding="utf-8"),
+            RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=0, encoding="utf-8"),
         ],
         force=True,
     )

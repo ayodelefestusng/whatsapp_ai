@@ -21,6 +21,8 @@ from langchain_core.messages import (
     ToolMessage,
     AnyMessage,
 )
+from langchain_community.vectorstores import FAISS
+
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from langgraph.prebuilt import ToolNode, create_react_agent, tools_condition
@@ -33,7 +35,7 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 
 
 # from myproject_revisit.org.management.commands import state
-
+import json 
 from ollama_service import OllamaService
 from base import (MultiplicationInput,
 PayslipQuery,LeaveBalanceRequest,PayslipListQuery,PayslipInfo,PayslipSummary,PayslipListResponse,
@@ -726,6 +728,7 @@ def create_customer_profile_tool(config: RunnableConfig, **kwargs):
     Generates a unique 10-digit account number and returns it.
     """
     tid = kwargs.get('current_tool_id') or "unknown_id"
+    tenant_code = config["configurable"].get("tenant_id", "unknown")  # Assuming tenant_code is same as tenant_id for lookup
     tenant_id = config["configurable"].get("tenant_id", "unknown")
     conversation_id = config["configurable"].get("conversation_id", "unknown")
     db_uri = config["configurable"].get("db_uri")
@@ -851,7 +854,7 @@ def init_sql_agent(state: State, llm):
         #     password=OLLAMA_PASSWORD,
         #     model=OLLAMA_MODEL
         # )
-        from .chat_bot import get_model
+        from chat_bot import get_model
         llm =get_model()  # Use the existing get_model function to maintain consistency and leverage any caching or configuration it provides
         toolkit = SQLDatabaseToolkit(db=db, llm=llm)
         tools = toolkit.get_tools()
@@ -1054,7 +1057,7 @@ def update_customer_tool(config: RunnableConfig, **kwargs):
     "sql_query_tool",
     description="Useful for answering questions requiring data from a SQL database (e.g., 'How many users are there?'). Input should be a natural language question.",
 )
-def sql_query_tool(query: str, state: dict) -> dict:
+def sql_query_tool(query: Any, state: dict) -> dict:
     # --- 1. State Extraction & Logging ---
     tenant_config = state.get("tenant_config", {})
     tenant_id = tenant_config.get("tenant_id", "unknown")
@@ -1199,7 +1202,7 @@ def pdf_retrieval_tool(query: str, state: dict) -> dict:
 
     tenant_id = "unknown"
     conversation_id = "unknown"
-
+    
     if isinstance(state, str):
         try:
             state = json.loads(state)
@@ -1251,6 +1254,7 @@ def pdf_retrieval_tool(query: str, state: dict) -> dict:
     log_debug(f"Search Path: {vector_store_path}", tenant_id, conversation_id)
 
     try:
+        from chat_bot import get_llm_instance,embeddings, get_model
         # 4. LOAD FAISS Index
         log_info("Attempting to load FAISS index.", tenant_id, conversation_id)
         vector_store = FAISS.load_local(
@@ -1339,6 +1343,7 @@ def web_search_tool(query: str, state: dict) -> dict:
     conversation_id = state.get("conversation_id", "unknown")
 
     log_info("search_web tool invoked", tenant_id, conversation_id)
+    from urllib.parse import urlparse
 
     # 1. Collect priority domains from config
     priority_domains = []
@@ -1437,8 +1442,9 @@ def generate_visualization_tool(query: str, data: Any = None, state: Optional[di
     tid = kwargs.get('current_tool_id') or "unknown_id"
     log_info(f"Generating Visualization for query: '{query}'", tenant_id, conversation_id)
     analysis_text = "" # Initialize in case of early failure
+   
     try:
-        from .chat_bot import get_llm_instance
+        from chat_bot import get_llm_instance
         llm = get_llm_instance()
 
         if data:

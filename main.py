@@ -290,23 +290,19 @@ async def whatsapp_webhook(request: Request):
         if not message_text:
             return {"status": "ignored", "reason": "empty message"}
         
-        phone_number1="2348021299221"
-        tenant_id="DMC"
-        push_name="Obinna"
-        employee_id=DEFAULT_EMPLOYEE_ID
+       
         log_info(f"Processing message from {phone_number}: {message_text}", tenant_id, phone_number)
         response = process_message(
             message_content=message_text,
-            conversation_id=phone_number1,
+            conversation_id=phone_number,
             tenant_id=tenant_id,
             employee_id=employee_id,
             push_name=push_name
         )
-        log_info(f"LLM response for {phone_number1}: {response}", tenant_id, phone_number1)
-        log_info(f"Sent response to {phone_number1}. API response: {response}", tenant_id, phone_number1)
+        log_info(f"Sent response to {phone_number}. API response: {response}", tenant_id, phone_number)
 
-        message_res = send_whatsapp_message(phone_number1, response.get("answer", ""))
-        log_info(f"Treated Sent response to {phone_number1}. API response: {message_res}", tenant_id, phone_number1)
+        message_res = send_whatsapp_message(phone_number, response.get("answer", ""))
+        log_info(f"Treated Sent response to {phone_number}. API response: {message_res}", tenant_id, phone_number)
         return message_res
     except Exception as e:
         log_error(f"Error in whatsapp_webhook: {e}", "unknown", "unknown")

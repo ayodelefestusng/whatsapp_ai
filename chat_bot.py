@@ -768,7 +768,7 @@ def assistant_node(state: State, config: RunnableConfig):
     # agent_prompt = tenant_config.get("agent_prompt") or None
 
     # Fetch the prompt template
-    agent_prompt = tenant_config.get("agent_prompt1",GLOBAL_FINAL_ANSWER_PROMPT)
+    agent_prompt = tenant_config.get("agent_prompt",GLOBAL_FINAL_ANSWER_PROMPT)
 
     # Build string of tool descriptions and arguments
     tool_descriptions = "\n".join([f"- {t.name}: {t.description}\n  Arguments schema: {t.args}" for t in tools])

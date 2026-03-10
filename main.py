@@ -285,7 +285,6 @@ async def whatsapp_webhook(request: Request):
             push_name = form_data.get("pushName") or "User"
             tenant_id = form_data.get("tenant_id", "DMC")
             employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
-        message_text="Give a  chart showing the monthly transaction count from inception to date"
         # message_text="Hello Can I get a loan"
         if not message_text:
             return {"status": "ignored", "reason": "empty message"}

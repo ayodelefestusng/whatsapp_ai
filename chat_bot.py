@@ -274,7 +274,8 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
 
         Tool Guide:{tool_intent_map}
         - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
-    
+        - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
+           
         ### Available Tools & Required Arguments:
         {tool_descriptions}
 
@@ -359,9 +360,57 @@ def get_embeddings():
 
  
 
- 
+import os
+import shutil
+import logging
 
 def ingest_pdf_for_tenant(tenant_id: str, file_path: str):
+    """
+    Load a PDF, split into chunks, create a FAISS index.
+    If an index already exists for the tenant, it is removed and replaced.
+    """
+    tenant_id = str(tenant_id)
+    persist_directory = os.path.join("faiss_dbs", tenant_id)
+    
+    logger.info(f"[VectorStore | Tenant: {tenant_id}] Starting ingestion for {file_path}")
+    
+    try:
+        # 1. Clean up existing index (Remove and Ingest logic)
+        if os.path.exists(persist_directory):
+            logger.info(f"[VectorStore | Tenant: {tenant_id}] Existing index found. Removing {persist_directory}...")
+            shutil.rmtree(persist_directory)
+        
+        # 2. Path Validation
+        abs_path = os.path.abspath(file_path)
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"PDF file not found at: {file_path}")
+            
+        # 3. Load PDF
+        loader = PyPDFLoader(file_path)
+        documents = loader.load()
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Loaded {len(documents)} pages.")
+        
+        # 4. Split
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        chunks = splitter.split_documents(documents)
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Split into {len(chunks)} chunks.")
+        
+        # 5. Embed and Create FAISS
+        emb = get_embeddings()
+        vector_store = FAISS.from_documents(chunks, emb)
+        
+        # 6. Save to Disk (Fresh directory)
+        os.makedirs(persist_directory, exist_ok=True)
+        vector_store.save_local(persist_directory)
+        logger.info(f"[VectorStore | Tenant: {tenant_id}] Successfully replaced index at {persist_directory}")
+        
+        return {"status": "success", "chunk_count": len(chunks), "path": persist_directory}
+        
+    except Exception as e:
+        logger.error(f"[VectorStore | Tenant: {tenant_id}] Ingestion failed: {e}")
+        return {"status": "error", "message": str(e)}
+
+def ingest_pdf_for_tenantv1(tenant_id: str, file_path: str):
     """
     Load a PDF, split into chunks, create a FAISS index, and save to disk.
     """
@@ -768,7 +817,10 @@ def assistant_node(state: State, config: RunnableConfig):
     # agent_prompt = tenant_config.get("agent_prompt") or None
 
     # Fetch the prompt template
-    agent_prompt = tenant_config.get("agent_prompt",GLOBAL_FINAL_ANSWER_PROMPT)
+    agent_prompt = tenant_config.get("agent_prompt1",GLOBAL_FINAL_ANSWER_PROMPT)
+
+
+
 
     # Build string of tool descriptions and arguments
     tool_descriptions = "\n".join([f"- {t.name}: {t.description}\n  Arguments schema: {t.args}" for t in tools])

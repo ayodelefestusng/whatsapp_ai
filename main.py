@@ -1,3 +1,5 @@
+from math import log
+from multiprocessing.dummy.connection import Client
 import os
 import re
 import requests
@@ -39,8 +41,48 @@ def convert_drive_link_to_direct(url: str) -> str:
         return direct_url
     else:
         raise ValueError("Could not extract file ID from Google Drive link")
-
 def fetch_and_save_pdf(url: str) -> str:
+    log_info(f"Attempting to download PDF from URL: {url}", "N/A", "system")
+    
+    session = requests.Session()
+    # Initial request to check for the Google Drive virus scan warning
+    resp = session.get(url, allow_redirects=True, stream=True, timeout=30)
+    
+    if resp.status_code != 200:
+        raise ValueError(f"Failed to download URL. Status code: {resp.status_code}")
+
+    # --- Handling Google Drive Large File "Confirm" Step ---
+    if "drive.google.com" in url and "text/html" in resp.headers.get("Content-Type", ""):
+        # Check if there is a 'confirm' token in the cookies/page
+        confirm_token = None
+        for key, value in resp.cookies.items():
+            if key.startswith('download_warning'):
+                confirm_token = value
+                break
+        
+        if confirm_token:
+            url = url + f"&confirm={confirm_token}"
+            resp = session.get(url, stream=True, timeout=30)
+
+    ct = resp.headers.get("Content-Type", "").lower()
+    
+    if any(allowed in ct for allowed in ["pdf", "binary", "octet-stream", "x-download"]):
+        fd, temp_path = tempfile.mkstemp(suffix=".pdf")
+        with os.fdopen(fd, "wb") as tmp:
+            try:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    if chunk:
+                        tmp.write(chunk)
+            except Exception as e:
+                # Catching the EOF error during the stream
+                os.close(fd)
+                raise ConnectionError(f"Stream interrupted: {e}")
+        
+        log_info(f"Successfully downloaded PDF to {temp_path}", "N/A", "system")
+        return temp_path
+    else:
+        raise ValueError(f"URL did not return a PDF. Got Content-Type: {ct}")
+def fetch_and_save_pdfv1(url: str) -> str:
     """
     Download a PDF (or binary stream) from a URL and save it locally.
     Returns the local file path.
@@ -72,6 +114,63 @@ def log_debug(msg, tenant_id, conversation_id):
     # Stub for log_debug if not imported
     from logger_utils import logger
     logger.debug(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
+
+
+import redis
+import requests
+# --- Redis Setup ---
+REDIS_URL = os.getenv("REDIS_URL", "redis://default:65f11924ebc7c9e25051@whatsapp-1_evolution-api-redis:6379")
+redis_client = redis.Redis.from_url(REDIS_URL)
+# Ollama client setup 
+
+EVOLUTION_API_URL = os.getenv("EVOLUTION_API_URL", "http://whatsapp-1_evolution-api:8080")
+EVOLUTION_API_KEY = os.getenv("EVOLUTION_API_KEY")
+EVOLUTION_INSTANCE = os.getenv("EVOLUTION_INSTANCE", "session1")
+def send_whatsapp_message_wrond__deployed(number: str, text: str):
+    url = f"{EVOLUTION_API_URL}/message/send"
+    headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}
+    clean_number = number.replace("+", "").strip()
+    if "@" not in clean_number:
+        recipient = f"{clean_number}@s.whatsapp.net"
+    else:
+        recipient = clean_number
+
+    payload = {"number": recipient, "text": text}
+    
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
+
+
+
+
+def send_whatsapp_message1(number: str, text: str):
+    url = f"{EVOLUTION_API_URL}/message/send"
+    headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}
+    payload = {"number": number, "text": text}
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
+def send_whatsapp_message(number: str, text: str):
+    # Update this to include your instance name (e.g., session1)
+    # The endpoint should be /message/sendText/{{instance_name}}
+    url = f"{EVOLUTION_API_URL}/message/sendText/{EVOLUTION_INSTANCE}"
+    
+    # Evolution API uses 'apikey' in the header, not 'Authorization' Bearer
+    headers = {
+        "apikey": EVOLUTION_API_KEY,
+        "Content-Type": "application/json"
+    }
+    
+    clean_number = number.replace("+", "").strip()
+    recipient = f"{clean_number}@s.whatsapp.net" if "@" not in clean_number else clean_number
+
+    payload = {
+        "number": recipient,
+        "text": text,
+        "linkPreview": False
+    }
+    
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
 
 @app.get("/")
 def read_root():
@@ -151,8 +250,9 @@ async def load_pdf(request: LoadPDFRequest):
         log_error(f"Unexpected error in load_pdf: {e}", tenant_id, "system")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/whatsapp_webhook")
+@app.post("/webhook")
 async def whatsapp_webhook(request: Request):
+    log_info("Received webhook request", "unknown", "unknown")
     try:
         content_type = request.headers.get("content-type", "")
         if "application/json" in content_type:
@@ -185,18 +285,29 @@ async def whatsapp_webhook(request: Request):
             push_name = form_data.get("pushName") or "User"
             tenant_id = form_data.get("tenant_id", "DMC")
             employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
-        
+        message_text="Give a  chart showing the monthly transaction count from inception to date"
+        # message_text="Hello Can I get a loan"
         if not message_text:
             return {"status": "ignored", "reason": "empty message"}
-
+        
+        phone_number1="2348021299221"
+        tenant_id="DMC"
+        push_name="Obinna"
+        employee_id=DEFAULT_EMPLOYEE_ID
+        log_info(f"Processing message from {phone_number}: {message_text}", tenant_id, phone_number)
         response = process_message(
             message_content=message_text,
-            conversation_id=phone_number,
+            conversation_id=phone_number1,
             tenant_id=tenant_id,
             employee_id=employee_id,
             push_name=push_name
         )
-        return response
+        log_info(f"LLM response for {phone_number1}: {response}", tenant_id, phone_number1)
+        log_info(f"Sent response to {phone_number1}. API response: {response}", tenant_id, phone_number1)
+
+        message_res = send_whatsapp_message(phone_number1, response.get("answer", ""))
+        log_info(f"Treated Sent response to {phone_number1}. API response: {message_res}", tenant_id, phone_number1)
+        return message_res
     except Exception as e:
         log_error(f"Error in whatsapp_webhook: {e}", "unknown", "unknown")
         raise HTTPException(status_code=500, detail=str(e))

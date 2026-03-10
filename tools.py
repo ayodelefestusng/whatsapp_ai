@@ -63,7 +63,7 @@ search_tool = TavilySearch(
 )
 
 
-@tool("get_payslip_tool", args_schema=PayslipQuery)
+@tool("get_payslip_tool", args_schema=PayslipQuery, description="Useful for fetching payslip archives. Input dates can be in various formats (e.g., 'Jan 2025', '01/25', '2025-01', '012025'). Outputs a download URL for the specified period.")
 def get_payslip_tool(config: RunnableConfig, **kwargs):
     """Normalizes dates to MMYYYY and fetches payslip archive."""
     

@@ -1206,18 +1206,21 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
                 # result = {"answer": extracted_text}
                 result = extracted_text
                 # Add visualization fields if present in final_state
-                # if final_state.get("visualization_image"):
-                #     result["visualization_image"] = final_state["visualization_image"]
-                # if final_state.get("visualization_analysis"):
-                #     result["visualization_analysis"] = final_state["visualization_analysis"]
+                if final_state.get("visualization_image"):
+                    logger.info(f"Visualization Image: {final_state['visualization_image']}")
+                    viz= f"thus the chart is {final_state['visualization_image']}"
+                    result = result+"\n"+viz
+                    
+                if final_state.get("visualization_analysis"):
+                    result = result+"\n"+final_state['visualization_analysis']
                     
                 logger.info(f"LLM Response Extracted: {extracted_text}")
-                return extracted_text
+                return result
 
             else:
                 fallback = "I apologize, but I encountered an internal error processing your request."
                 logger.info(f"LLM Response Fallback: {fallback}")
-                return {"answer": fallback}
+                return fallback
 
         except Exception as e:
             logger.error(f"Error extracting final response: {str(e)}", exc_info=True)

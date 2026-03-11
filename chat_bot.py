@@ -1,3 +1,5 @@
+from ast import If
+from calendar import c
 import os
 import sys
 import json
@@ -14,7 +16,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from logging.handlers import RotatingFileHandler
-
+from langchain.agents.structured_output import ToolStrategy
 # LangChain / LangGraph
 from langchain_core.messages import (
     AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -29,11 +31,13 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, START, StateGraph
 from langgraph.checkpoint.postgres import PostgresSaver
 from langchain.chat_models import init_chat_model
+from langchain.agents.structured_output import ToolStrategy
 
+from langchain.agents import create_agent
 # Local Imports
 from database import SessionLocal
 from ollama_service import OllamaService
-from base import State, Answer
+from base import State, Answer, Context, ResponseFormat
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
 from tools import tools, init_sql_agent
@@ -94,15 +98,17 @@ def get_model():
         base_llm = get_llm_instance()
         
         if base_llm is not None:
-            # 'tools' must be defined earlier in your file or imported
-            # llm= base_llm
+            # Replaced with standardized tool list
+            from tools import tools
+            # _llm = base_llm.bind_tools(tools)
             logger.info("✅ Model and tools initialized successfully.")
             return base_llm
-        
+        else:
+            logger.error("❌ Failed to initialize base LLM.")
+            return None
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_model_with_tools: {e}", exc_info=True)
-    
-    return None
+        logger.error(f"❌ Error initializing model/tools: {e}")
+        return None
 
 
 
@@ -1001,7 +1007,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
     if not employee_id:
         employee_id = DEFAULT_EMPLOYEE_ID
     log_info("Starting message processing pipeline", tenant_id, conversation_id)
-    log_info(f"Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
+    log_info(f" alukett Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
     
     vector_store_result = initialize_vector_store(tenant_id)
 
@@ -1049,7 +1055,14 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             log_info("Fetched tenant AI config", tenant_id, conversation_id)    
     except Exception as e:
         log_error(f"Database configuration fetch failed: {e}. Using defaults.", tenant_id, conversation_id)
-
+    
+    if p_res:
+        log_info(f"Prompt template found: {p_res[0][:50]}...", tenant_id, conversation_id)
+        system_prompt = p_res[0]
+    else:
+        log_warning("No prompt template found in DB. Using global default.", tenant_id, conversation_id)
+        system_prompt = GLOBAL_FINAL_ANSWER_PROMPT    
+  
     tenant_config_dict = {
         "tenant_id": tenant_id,
         "employee_id": employee_id,
@@ -1107,51 +1120,105 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         
         
     log_info(f"Tenant config prepared. DB URI present: {bool(db_uri)}", tenant_id, conversation_id)
-        
+    
     with PostgresSaver.from_conn_string(db_uri) as checkpointer:
     # with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
         checkpointer.setup()
-        app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
+        # app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
         
-        config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
-        initial_state = {
-            "messages": [HumanMessage(content=message_content)],
-            "user_query": message_content,
-            "tenant_config": tenant_config_dict,
-            "vector_store_path": persist_directory
-        }
+
+        # config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
         
-        final_state = app.invoke(initial_state, config=config)
+        config = {"configurable": {"thread_id": conversation_id}}
+
+        # initial_state = {
+        #     "messages": [HumanMessage(content=message_content)],
+        #     "user_query": message_content,
+        #     "tenant_config": tenant_config_dict,
+        #     "vector_store_path": persist_directory
+        # }
+        
+      
+        context = Context(
+            tenant_id=tenant_id,
+            conversation_id=conversation_id,
+            emp_id=employee_id,
+            db_uri=db_uri,
+            push_name=push_name,
+            agent_prompt=p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
+            final_answer_prompt=p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
+            tool_intent_map=p_res[2] if p_res else tool_guide,
+            vector_store_path=persist_directory
+        )
+              
+        agent = create_agent(
+    model=get_model(),
+    system_prompt=system_prompt,
+    tools=tools,
+    context_schema=Context,
+    response_format=ToolStrategy(ResponseFormat),
+    checkpointer=checkpointer
+)
+
+        # final_state = app.invoke(initial_state, config=config)
+        # final_state = agent.invoke({"messages": [HumanMessage(content=message_content)]}, config=config)
+        final_state = agent.invoke(
+    {"messages": [{"role": "user", "content": message_content}]},
+    config=config,
+    context=context
+)
+        logger.info(f" Raw LLM response  : {final_state}")
         
         # Correctly access the final answer from the messages in the state
         messages = final_state.get("messages", [])
         # if messages:
         current_answer = messages[-1].content if messages else ""
             
-        logger.info(f"LLM response Process message : {current_answer}")
-        metadata = final_state.get("metadata", {})
-        
-        if current_answer:
-            if isinstance(current_answer, dict) and "answer" in current_answer:
-                current_answer = current_answer["answer"]
+        try:
+            logger.info(f"LLM response Process message : {current_answer}")
             
-            # Start with the mandatory fields
-            result = {
-                "answer": current_answer,
-                "metadata": metadata
-            }
-            
-            # Only add visualization fields if they exist and are not None
-            if final_state.get("visualization_image"):
-                result["visualization_image"] = final_state["visualization_image"]
-                
-            if final_state.get("visualization_analysis"):
-                result["visualization_analysis"] = final_state["visualization_analysis"]
-                
-            return result
-            
-        else:
-            fallback = "I apologize, but I encountered an internal error processing your request."
-            logger.info(f"LLM Response Fallback: {fallback}")
-            return {"answer": fallback, "metadata": {}}
+            # 1. Extraction Logic: Handle objects (ResponseFormat), dictionaries, or JSON strings
+            if current_answer:
+                # If it's the ResponseFormat object
+                if hasattr(current_answer, 'answer'):
+                    extracted_text = current_answer.answer
+                elif hasattr(current_answer, 'punny_response'):
+                    extracted_text = current_answer.punny_response
+                # If it's already a dictionary
+                elif isinstance(current_answer, dict):
+                    extracted_text = current_answer.get("answer", current_answer.get("punny_response", str(current_answer)))
+                # If it's a string, try to parse as JSON in case it's a JSON-formatted string
+                elif isinstance(current_answer, str):
+                    try:
+                        # Clean up common AI markdown wrappers
+                        cleaned_str = re.sub(r"```json\s*|\s*```", "", current_answer.strip())
+                        data = json.loads(cleaned_str)
+                        if isinstance(data, dict):
+                            extracted_text = data.get("answer", data.get("punny_response", current_answer))
+                        else:
+                            extracted_text = current_answer
+                    except (json.JSONDecodeError, AttributeError):
+                        extracted_text = current_answer
+                else:
+                    extracted_text = str(current_answer)
+                    
+                # 2. Build the result dictionary
+                # result = {"answer": extracted_text}
+                result = extracted_text
+                # Add visualization fields if present in final_state
+                # if final_state.get("visualization_image"):
+                #     result["visualization_image"] = final_state["visualization_image"]
+                # if final_state.get("visualization_analysis"):
+                #     result["visualization_analysis"] = final_state["visualization_analysis"]
+                    
+                logger.info(f"LLM Response Extracted: {extracted_text}")
+                return extracted_text
 
+            else:
+                fallback = "I apologize, but I encountered an internal error processing your request."
+                logger.info(f"LLM Response Fallback: {fallback}")
+                return {"answer": fallback}
+
+        except Exception as e:
+            logger.error(f"Error extracting final response: {str(e)}", exc_info=True)
+            return "An unexpected error occurred while formatting the response."

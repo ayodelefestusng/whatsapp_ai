@@ -1,7 +1,6 @@
 from typing import Any, Dict, List, Literal, Optional, Union, Annotated
 from pydantic import BaseModel, Field, ValidationError
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.graph import END, START, MessagesState, StateGraph
 
 # Define the input schema for the multiplication tool
 class MultiplicationInput(BaseModel):
@@ -18,14 +17,16 @@ class MultiplicationInput(BaseModel):
     )
 
 class PayslipQuery(BaseModel):
-    start_date: str = Field(..., description="Start month and year in MMYYYY format (e.g., 012025)")
-    end_date: str = Field(..., description="End month and year in MMYYYY format (e.g., 122025)")
-    current_tool_id: Optional[str] = Field(None) 
+    start_date: str = Field(..., description="Start month and year in MMYYYY format (e.g., 012025) or natural language (e.g., 'Jan 2025')")
+    end_date: str = Field(..., description="End month and year in MMYYYY format (e.g., 122025) or natural language")
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID") 
     
 class LeaveBalanceRequest(BaseModel):
-    employee_id: str = Field(..., description="Internal employee ID")
-    year: str = Field(..., description="Leave year to check")
-
+    employee_id: str = Field(..., description="Internal employee ID (email)")
+    year: int = Field(..., description="Leave year to check (e.g., 2025)")
+    leaveTypeName: str = Field(..., description="Name of the leave type to check")
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
+    
 class PayslipListQuery(BaseModel):
     employee_id: str
     year: int
@@ -75,7 +76,8 @@ class PayslipExplainResponse(BaseModel):
     
 
 class LeaveTypeRequest(BaseModel):
-    current_tool_id: Optional[str] = Field(None, description="Injected ID")
+    employee_id: Optional[str] = Field(None, description="The ID of the employee")
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
 class PrepareLeaveApplicationRequest(BaseModel):
     employeeID: str
     leaveTypeName: str
@@ -228,7 +230,7 @@ class UpdateCustomerProfileInput(BaseModel):
     occupation: Optional[str] = Field(None, description="The new occupation")
     town_of_residence_id: Optional[int] = Field(None, description="ID of the town of residence Location")
     branch_id: Optional[int] = Field(None, description="ID of the branch Location")
-    current_tool_id: Optional[str] = Field(None)
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
 
 
 # ==========================
@@ -274,10 +276,13 @@ class VisualizationInput(BaseModel):
     query: str = Field(description="The user's natural language request for a chart or visualization, e.g., 'Plot the total sales by region'.")
     data: Optional[Any] = Field(None, description="The raw data payload from sql_query_tool to visualize. MUST be provided if available.")
     state: Optional[dict] = Field(None, description="Injected workflow state")
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
 class SQLQueryInput(BaseModel):
     """Input schema for the sql_query_tool."""
-    query: str = Field(description="The natural language question to be converted into a SQL query.")
-
+    query: Any = Field(description="The natural language question to be converted into a SQL query or the generated SQL query itself.")
+    state: Optional[dict] = Field(None, description="Injected workflow state")
+    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
+    
 class Summary(BaseModel):
     """Conversation summary schema."""
 
@@ -296,6 +301,30 @@ class Summary(BaseModel):
     )
 
 
+class Context(BaseModel):
+    """Context schema for the agent."""
+    tenant_id: str = Field(description="The tenant or organization ID.") 
+    conversation_id: str = Field(description="The unique ID for the conversation thread.")
+    emp_id: Optional[str] = Field(description="The employee's email or ID, if available.")
+    db_uri: Optional[str] = Field(description="Database connection URI, injected at runtime.")
+    push_name: Optional[str] = Field(description="The name of the push notification, injected at runtime.")
+    agent_prompt: str = Field(description="The original prompt given to the agent, injected at runtime.")
+    final_answer_prompt: str = Field(description="The final prompt used to generate the answer, injected at runtime.")
+    tool_intent_map: Optional[Dict[str, Any]] = Field(description="A mapping of tool categories to their intended tools and triggers.")
+    # tenant_config: Optional[Dict[str, Any]] = Field(description="Configuration settings specific to the tenant, injected at runtime.")
+    vector_store_path: Optional[str] = Field(description="The file path to the tenant's vector store, injected at runtime.")
+    # summarization_request: bool = Field(description="Indicates if this is a summarization request, injected at runtime.")
+   
+class ResponseFormat(BaseModel):
+    """Response schema for the agent."""
+    # A punny response (always required)
+    answer: str = Field(description="A concise response to the user's query.")
+    # Any interesting information about the weather if available
+    leave_application: Optional[dict]= Field(description="The leave approval status to be injected by tools if applicable, otherwise null.")
+    visualization_image: Optional[str] = Field(None, description="Base64-encoded image string of the generated visualization, if applicable.")
+    visualization_analysis:Optional[str] = Field(None, description="Amalysis  of the generated visualization, if applicable.")
+
+ 
 class State(MessagesState):
     """Manages the conversation state. Uses Pydantic models for structured data."""
 

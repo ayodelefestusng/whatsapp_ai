@@ -324,3 +324,123 @@ class OllamaService(BaseChatModel):
 
     async def close(self):
         pass
+
+
+
+class OllamaServicev1(BaseChatModel):
+    model: str = Field(default="gpt-oss:120b")
+    timeout: float = Field(default=60.0)
+
+    # def __init__(self, **kwargs):
+    #     super().__init__(**kwargs)
+
+    @property
+    def _llm_type(self) -> str:
+        return "ollama_cloud_only"
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        # Route everything through the cloud call
+        ollama_messages = self._prepare_messages(messages)
+        resp = self._cloud_call_sync(ollama_messages)
+        return self._process_cloud_response(resp)
+    
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs) -> ChatResult:
+        ollama_messages = self._prepare_messages(messages)
+        # Offload sync cloud call to thread to avoid blocking the event loop
+        resp = await asyncio.to_thread(self._cloud_call_sync, ollama_messages)
+        return self._process_cloud_response(resp)
+    def _prepare_messages(self, messages: List[BaseMessage]) -> List[Dict[str, str]]:
+        ollama_messages = []
+        for m in messages:
+            role = "user"
+            if isinstance(m, SystemMessage): role = "system"
+            elif isinstance(m, AIMessage): role = "assistant"
+            ollama_messages.append({"role": role, "content": m.content})
+        return ollama_messages
+
+    def _prepare_payload(self, messages: List[Dict[str, str]], **kwargs) -> Dict[str, Any]:
+        tools = kwargs.pop("tools", None)
+        format_val = kwargs.pop("format", None)
+        payload = {"model": self.model, "messages": messages, "stream": False, **kwargs}
+        if format_val: payload["format"] = format_val
+        if tools: payload["tools"] = tools
+        return payload
+
+    def _cloud_call_sync(self, messages: List[Dict[str, str]]):
+        api_key = os.getenv("OLLAMA_API_KEY", "").strip('"').strip("'")
+        cloud_model = os.getenv("OLLAMA_CLOUD_MODEL", "gpt-oss:120b")
+        if cloud_model.endswith("-cloud"): cloud_model = cloud_model[:-6]
+        
+        # Use direct httpx for the cloud call as well to bypass any library-level async logic
+        import httpx
+        url = "https://ollama.com/api/chat"
+        payload = {
+            "model": cloud_model,
+            "messages": messages,
+            "stream": False
+        }
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(url, json=payload, headers=headers)
+            if response.status_code != 200:
+                raise Exception(f"Ollama Cloud API error {response.status_code}: {response.text}")
+            return response.json()
+
+    def _process_cloud_response(self, resp) -> ChatResult:
+        # Re-using the same extraction logic from your original file
+        content = ""
+        # Since resp is now a dict from response.json(), we use .get() instead of getattr
+        msg_data = resp.get("message", {}) if isinstance(resp, dict) else getattr(resp, "message", {})
+        
+        if isinstance(msg_data, dict): content = msg_data.get("content") or msg_data.get("response")
+        elif hasattr(msg_data, "content"): content = msg_data.content
+        
+        raw_tool_calls = msg_data.get('tool_calls') if isinstance(msg_data, dict) else getattr(msg_data, 'tool_calls', [])
+        if raw_tool_calls is None: raw_tool_calls = []
+        formatted_tool_calls = self._format_tool_calls(raw_tool_calls)
+        
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content or "", tool_calls=formatted_tool_calls))])
+
+    def _process_local_response(self, data: Dict[str, Any]) -> ChatResult:
+        msg_data = data.get('message', {})
+        content = msg_data.get('content', data.get('response', ''))
+        formatted_tool_calls = self._format_tool_calls(msg_data.get('tool_calls', []))
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(content=content, tool_calls=formatted_tool_calls))])
+
+    def _format_tool_calls(self, raw_tool_calls: Optional[List[Any]]) -> List[Dict[str, Any]]:
+        formatted = []
+        if raw_tool_calls is None:
+            return formatted
+        for i, tc in enumerate(raw_tool_calls):
+            if "function" in tc:
+                f = tc["function"]
+                args = f.get("arguments")
+                if isinstance(args, str):
+                    try: args = json.loads(args)
+                    except: pass
+                formatted.append({"name": f.get("name"), "args": args, "id": tc.get("id", f"call_{i}")})
+            else:
+                formatted.append(tc)
+        return formatted
+
+
+    def bind_tools(
+        self,
+        tools: Union[List[Any], Any],
+        **kwargs: Any,
+    ) -> Runnable[LanguageModelInput, AIMessage]:
+        """
+        Bind tools for compatibility with LangGraph and other LangChain components.
+        """
+        from langchain_core.utils.function_calling import convert_to_openai_function
+        openai_tools = [convert_to_openai_function(t) for t in tools]
+        ollama_tools = [{"type": "function", "function": t} for t in openai_tools]
+        
+        return self.bind(tools=ollama_tools, **kwargs)
+
+    async def close(self):
+        pass

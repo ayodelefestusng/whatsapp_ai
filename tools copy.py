@@ -34,14 +34,7 @@ from langchain_tavily import TavilySearch
 from langchain.tools import tool
 from langchain_community.utilities import SQLDatabase
 from langchain_community.agent_toolkits import SQLDatabaseToolkit
-from langchain.tools import tool, ToolRuntime
-from dataclasses import dataclass
-# from langchain_openai import ChatOpenAI
-from langchain.agents import create_agent
-from langchain.tools import tool, ToolRuntime
-from langgraph.types import Command
-from langchain.tools import tool
-from langchain.agents.structured_output import ToolStrategy
+
 
 
 # from myproject_revisit.org.management.commands import state
@@ -53,7 +46,7 @@ PayslipDownloadQuery,PayslipDownloadResponse,PayslipExplainQuery,PayslipExplainR
 PrepareLeaveApplicationRequest,PreparedLeaveApplication,ValidateLeaveBalanceRequest,
 ValidateLeaveBalanceResponse,CalculateDaysRequest,CalculateDaysResponse,SubmitLeaveApplicationRequest,SearchJobOpportunitiesRequest,
 JobOpportunityResponse,LeaveStatusRequest,ExitPolicyRequest,TravelSearchRequest,ProfileUpdateInput,
-CustomerProfileInput,CustomerDetailsInput,ToolInput,Answer,VisualizationInput,SQLQueryInput,Summary,State,UpdateCustomerProfileInput,Context,ResponseFormat
+CustomerProfileInput,CustomerDetailsInput,ToolInput,Answer,VisualizationInput,SQLQueryInput,Summary,State,UpdateCustomerProfileInput
            )
 # Ensure UTF-8 output
 if hasattr(sys.stdout, "reconfigure"):
@@ -76,11 +69,10 @@ search_tool = TavilySearch(
 
 
 @tool("get_payslip_tool", args_schema=PayslipQuery, description="Useful for fetching payslip archives. Input dates can be in various formats (e.g., 'Jan 2025', '01/25', '2025-01', '012025'). Outputs a download URL for the specified period.")
-def get_payslip_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
+def get_payslip_tool(config: RunnableConfig, runtime: ToolRuntime):
     """Normalizes dates to MMYYYY and fetches payslip archive."""
-    employee_id = runtime.context.employee_id  
-    query = PayslipQuery(**kwargs)
-        
+    user_id = runtime.context.user_id  
+    tid = kwargs.get('current_tool_id')
     raw_start = kwargs.get('start_date')
     raw_end = kwargs.get('end_date')
     
@@ -101,8 +93,8 @@ def get_payslip_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
         clean_start = normalize_to_mmyyyy(raw_start)
         clean_end = normalize_to_mmyyyy(raw_end)
         
-        # config_data = config.get("configurable", {})
-        # employee_id = config_data.get("employee_id")
+        config_data = config.get("configurable", {})
+        employee_id = config_data.get("employee_id")
         download_url = f"https://hr.system/payslip/{employee_id}/{clean_start}-{clean_end}.pdf"
 
         # The data structure you requested for PayslipInfo
@@ -111,49 +103,36 @@ def get_payslip_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
             "end_date": clean_end,     # Now guaranteed MMYYYY
             "download_url": download_url
         }
-        log_info(f"Generated payslip data: {payslip_data}", runtime.context.tenant_id, runtime.context.conversation_id)
-        response =f"Your payslip for {clean_start} to {clean_end} has been sent to your email."
-        return response
-        # return Command(
-        #     update={
-        #         "sudo": payslip_data, # Added as child to State
-        #         "messages": [
-        #             ToolMessage(
-        #                 content=f"Your payslip for {clean_start} to {clean_end} has been sent to your email.",
-        #                 tool_call_id=tid
-        #             )
-        #         ]
-        #     }
-        # )
+
+        return Command(
+            update={
+                "payslip_info": payslip_data, # Added as child to State
+                "messages": [
+                    ToolMessage(
+                        content=f"Your payslip for {clean_start} to {clean_end} has been sent to your email.",
+                        tool_call_id=tid
+                    )
+                ]
+            }
+        )
     except Exception as e:
         return f"I had trouble understanding the dates. Please use MMYYYY format. Error: {str(e)}"
 
-
-
 @tool("fetch_available_leave_types_tool", args_schema=LeaveTypeRequest)
-# def fetch_available_leave_types_tool(config: RunnableConfig, **kwargs):
-def fetch_available_leave_types_tool(runtime: ToolRuntime[Context], **kwargs)  -> str:  
+def fetch_available_leave_types_tool(config: RunnableConfig, **kwargs):
     """
     REQUIRED FIRST STEP for leave applications. 
     Fetches available leave types from the PostgreSQL tenant database.
     """
     # 1. Get the ID we injected in tool_node for the response message
-  
-    
-    
-    emp_id = runtime.context.emp_id  
-    query = LeaveTypeRequest(**kwargs)
-    tenant_id = runtime.context.tenant_id
-    db_uri = runtime.context.db_uri
- 
     tid = kwargs.get('current_tool_id')
     if not tid:
         tid = "unknown_id" 
     
-    # config_data = config.get("configurable", {})
-    # emp_id = config_data.get("employee_id")
-    # tenant_id = config_data.get("tenant_id")
-    # db_uri = config_data.get("db_uri")
+    config_data = config.get("configurable", {})
+    emp_id = config_data.get("employee_id")
+    tenant_id = config_data.get("tenant_id")
+    db_uri = config_data.get("db_uri")
     
     log_info(f"Fetching available leave types for employee: {emp_id} from tenant: {tenant_id}", tenant_id, "unknown")
 
@@ -161,8 +140,7 @@ def fetch_available_leave_types_tool(runtime: ToolRuntime[Context], **kwargs)  -
         # Validate db_uri is available
         if not db_uri:
             log_error(f"No database URI available for tenant {tenant_id}", tenant_id, "unknown")
-            # return ToolMessage(content="Error: Database configuration missing.", tool_call_id=tid)
-            return "Error: Database configuration missing."
+            return ToolMessage(content="Error: Database configuration missing.", tool_call_id=tid)
 
         # Ensure PostgreSQL URI uses postgresql:// prefix
         if db_uri.startswith("postgres://"):
@@ -193,55 +171,41 @@ def fetch_available_leave_types_tool(runtime: ToolRuntime[Context], **kwargs)  -
                     leave_names = [row[1] for row in leave_types]  # row[1] is the name column
                     result_text = f"The following leave types are available: {', '.join(leave_names)}. Which one would you like to apply for?"
                     log_info(f"The result text from the fetch_available_leave_types_tool: {result_text}", tenant_id, "unknown")
-                    # return ToolMessage(content=result_text, tool_call_id=tid)
-                    return result_text
+                    return ToolMessage(content=result_text, tool_call_id=tid)
                 else:
-                    # return ToolMessage(content="No leave types are currently configured for your tenant.", tool_call_id=tid)
-                    return "No leave types are currently configured for your tenant."
-
-        finally:    
+                    return ToolMessage(content="No leave types are currently configured for your tenant.", tool_call_id=tid)
+        finally:
             engine.dispose()
 
     except Exception as e:
         log_info(f"Failed to fetch leave types from database: {str(e)}", tenant_id, "unknown")
-        # return ToolMessage(content=f"Error retrieving leave types: {str(e)}", tool_call_id=tid)
-        return f"Error retrieving leave types: {str(e)}"
+        return ToolMessage(content=f"Error retrieving leave types: {str(e)}", tool_call_id=tid)
 
 
 
 @tool("validate_leave_balance_tool", args_schema=ValidateLeaveBalanceRequest)
-def validate_leave_balance_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
+def validate_leave_balance_tool(config: RunnableConfig, **kwargs):
     """
     Validates leave balance against the PostgreSQL tenant database.
     If numOfDays is 0, it calculates it using the dates provided in the workflow state.
     """
-    
-    
-    emp_id = runtime.context.emp_id  
-    query = LeaveTypeRequest(**kwargs)
-    tenant_id = runtime.context.tenant_id
-    db_uri = runtime.context.db_uri
- 
-    tid = kwargs.get('current_tool_id')
-    if not tid:
-        tid = "unknown_id" 
-    
-    # tid = kwargs.get('current_tool_id') or "unknown_id"
-    emp_id = runtime.context.emp_id  
+    tid = kwargs.get('current_tool_id') or "unknown_id"
+    emp_id = kwargs.get('employeeID')
     leave_type_name = kwargs.get('leaveTypeName')
     leave_type_id = kwargs.get('leaveTypeID')
     year = kwargs.get('year')
     num_days = kwargs.get('numOfDays')
     
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    config_data = config.get("configurable", {})
+    tenant_id = config_data.get("tenant_id", "unknown")
+    conversation_id = config_data.get("thread_id", "unknown")
+    db_uri = config_data.get("db_uri")
     
     log_info(f"Validating leave balance for employee: {emp_id} (Type: {leave_type_name})", tenant_id, conversation_id)
 
     try:
         if not db_uri:
-            return ToolMessage(content="Error: Database configuration missing.")
+            return ToolMessage(content="Error: Database configuration missing.", tool_call_id=tid)
 
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
@@ -320,17 +284,16 @@ def validate_leave_balance_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
 
 
 @tool("submit_leave_application_tool", args_schema=SubmitLeaveApplicationRequest)
-def submit_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
+def submit_leave_application_tool(config: RunnableConfig, **kwargs):
     """
     Finalizes the leave application and inserts the record into the PostgreSQL database.
     Resolves employee, leave type, and relief employee IDs from the database.
     """
     tid = kwargs.get('current_tool_id') or "unknown_id"
-    emp_email = runtime.context.emp_id
-    tenant_code = runtime.context.tenant_id
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    emp_email = config["configurable"].get("employee_id")
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
     
     # Extract fields from kwargs
     lt_name = kwargs.get('leaveTypeName')
@@ -355,8 +318,7 @@ def submit_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str
             start_date = datetime.strptime(start_str, "%d%m%Y").date()
             end_date = datetime.strptime(end_str, "%d%m%Y").date()
         except Exception as e:
-            # return ToolMessage(content=f"Error parsing dates: {str(e)}. Use DDMMYYYY format.", tool_call_id=tid)
-            return f"Error parsing dates: {str(e)}. Use DDMMYYYY format."
+            return ToolMessage(content=f"Error parsing dates: {str(e)}. Use DDMMYYYY format.", tool_call_id=tid)
 
         # from sqlalchemy import text
         engine = create_engine(db_uri)
@@ -423,21 +385,19 @@ def submit_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str
                 connection.commit()
 
                 success_msg = f"Leave application submitted successfully! Reference ID: {new_id}."
-                return success_msg
-             
-                # return Command(
-                #     update={
-                #         "leave_application": {
-                #             "status": "success",
-                #             "application_id": str(new_id)
-                #         },
-                #          "status_summary": success_msg,
-                #         "messages": [
-                #             ToolMessage(content=success_msg, tool_call_id=tid)
-                #         ]
-                #     },
-                #     goto="assistant"
-                # )
+                
+                return Command(
+                    update={
+                        "leave_application": {
+                            "status": "success",
+                            "application_id": str(new_id)
+                        },
+                        "messages": [
+                            ToolMessage(content=success_msg, tool_call_id=tid)
+                        ]
+                    },
+                    goto="assistant"
+                )
         finally:
             engine.dispose()
 
@@ -447,7 +407,7 @@ def submit_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str
 
 
 @tool("prepare_leave_application_tool", args_schema=PrepareLeaveApplicationRequest)
-def prepare_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str: 
+def prepare_leave_application_tool(config: RunnableConfig, **kwargs):
     """Validates full leave details including contact info and year selection."""
     
     tid = kwargs.get('current_tool_id')
@@ -461,8 +421,8 @@ def prepare_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> st
     contact = kwargs.get("contactNoWhileOnLeave")
     email = kwargs.get("emailWhileOnLeave")
 
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
     
     log_info(f"Preparing application for Year {leave_year}. Reliever: {reliever}", tenant_id, conversation_id)
 
@@ -480,59 +440,47 @@ def prepare_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> st
         resumption_str = resumption_dt_obj.strftime("%d-%m-%Y")
         
     except ValueError as e:
-        content=f"Error: {str(e)}. Please ensure dates are in DDMMYYYY format (e.g., 22122025).",
-        # return ToolMessage(
-        #     content=f"Error: {str(e)}. Please ensure dates are in DDMMYYYY format (e.g., 22122025).",
-        #     tool_call_id=tid
-        # )
-        return  content
+        return ToolMessage(
+            content=f"Error: {str(e)}. Please ensure dates are in DDMMYYYY format (e.g., 22122025).",
+            tool_call_id=tid
+        )
 
     log_info(f"Calculated resumption date as {resumption_str}", tenant_id, conversation_id)
 
     # 3. Update State
-    # return Command(
-    #     update={
-    #         "leave_application": {
-    #             "status": "prepared",
-    #             "details": {
-    #                 **kwargs, 
-    #                 "resumptionDate": resumption_str
-    #             }
-    #         },
-    #         "messages": [
-    #             ToolMessage(
-    #                 content=(
-    #                     f"I've prepared your application:\n"
-    #                     f"* Resumption: {resumption_str}\n"
-    #                     f"* Reliever: {reliever}\n"
-    #                     f"* Address: {address}\n"
-    #                     "Please confirm to **Submit**."
-    #                 ),
-    #                 tool_call_id=tid
-    #             )
-    #         ]
-    #     }
-    # )
-    return (
-        f"I've prepared your application:\n"
-        f"* Resumption: {resumption_str}\n"
-        f"* Reliever: {reliever}\n"
-        f"* Address: {address}\n"
-        "Please confirm to **Submit**."
+    return Command(
+        update={
+            "leave_application": {
+                "status": "prepared",
+                "details": {
+                    **kwargs, 
+                    "resumptionDate": resumption_str
+                }
+            },
+            "messages": [
+                ToolMessage(
+                    content=(
+                        f"I've prepared your application:\n"
+                        f"* Resumption: {resumption_str}\n"
+                        f"* Reliever: {reliever}\n"
+                        f"* Address: {address}\n"
+                        "Please confirm to **Submit**."
+                    ),
+                    tool_call_id=tid
+                )
+            ]
+        }
     )
 
+
 @tool("calculate_num_of_days_tool", args_schema=CalculateDaysRequest)
-def calculate_num_of_days_tool(runtime: ToolRuntime[Context], **kwargs)-> int: 
+def calculate_num_of_days_tool(startDate: str, endDate: str, holidays: List[str] = [], config: RunnableConfig = None):
     """
     Calculates the actual number of leave days by skipping weekends and 
     a provided list of public holidays.
     """
-    startDate = kwargs.get('startDate')
-    endDate = kwargs.get('endDate')
-    holidays = kwargs.get('holidays', [])
-    
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
+    tenant_id = config.get("configurable", {}).get("tenant_id", "unknown") if config else "unknown"
+    conversation_id = config.get("configurable", {}).get("conversation_id", "unknown") if config else "unknown"
     log_info(f"Calculating business days between {startDate} and {endDate}", tenant_id, conversation_id)
     
     try:
@@ -559,21 +507,20 @@ def calculate_num_of_days_tool(runtime: ToolRuntime[Context], **kwargs)-> int:
                 
             current_day += timedelta(days=1)
 
-        # logger.debug(f"Final calculation: {total_days} business days", "config")
-        log_info(f"Calculated {total_days} business days between {startDate} and {endDate}", tenant_id, conversation_id)
+        logger.debug(f"Final calculation: {total_days} business days", config)
 
         # 4. Return structured response
-        return total_days
-    
+        return CalculateDaysResponse(numOfDays=total_days)
+
     except Exception as e:
         log_debug(f"Error calculating leave days: {e}", tenant_id, conversation_id)
         # Fallback to a standard diff if parsing fails, or return 0
-        return 0
+        return CalculateDaysResponse(numOfDays=0)
 
 
 # 2. Update the Tool Function
 @tool("search_job_opportunities_tool", args_schema=SearchJobOpportunitiesRequest)
-def search_job_opportunities_tool(runtime: ToolRuntime[Context], **kwargs)-> str: 
+def search_job_opportunities_tool(config: RunnableConfig, **kwargs):
     """Searches for internal job opportunities by querying the tenant's PostgreSQL database.
 
     This tool uses the `org_jobrole` table and related joins. Only roles marked `vacant = true`
@@ -583,9 +530,9 @@ def search_job_opportunities_tool(runtime: ToolRuntime[Context], **kwargs)-> str
     tid = kwargs.get('current_tool_id')
     if not tid:
         tid = "unknown_id"
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
 
     log_info(f"Searching jobs for tenant {tenant_id} using db_uri {db_uri}", tenant_id, conversation_id)
 
@@ -652,15 +599,14 @@ def search_job_opportunities_tool(runtime: ToolRuntime[Context], **kwargs)-> str
         log_error(f"Job search failed: {str(e)}", tenant_id, conversation_id)
         return f"Error searching jobs: {str(e)}"
 @tool("fetch_leave_status_tool", args_schema=LeaveStatusRequest)
-def fetch_leave_status_tool(runtime: ToolRuntime[Context], **kwargs)-> str: 
+def fetch_leave_status_tool(config: RunnableConfig, **kwargs):
     """Checks the current status of the employee's leave requests and identifies the pending approver and latest comments."""
     
     tid = kwargs.get('current_tool_id') or "unknown_id"
-    emp_email = runtime.context.emp_id
-    tenant_id = runtime.context.tenant_id
-    tenant_code = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    emp_email = config["configurable"].get("employee_id")
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
 
     log_info(f"Fetching leave status for: {emp_email}", tenant_id, conversation_id)
 
@@ -678,10 +624,10 @@ def fetch_leave_status_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
             with engine.connect() as connection:
                 # 1. Resolve Tenant ID
                 t_query = text("SELECT id FROM org_tenant WHERE code = :code")
-                tenant_res = connection.execute(t_query, {"code": tenant_code}).fetchone()
-                if not tenant_res:
+                tenant_id = connection.execute(t_query, {"code": tenant_code}).fetchone()
+                if not tenant_id:
                     return ToolMessage(content=f"Error: Tenant '{tenant_code}' not found.", tool_call_id=tid)
-                tenant_db_id = tenant_res[0]
+                tenant_id = tenant_id[0]
 
                 # 2. Query Leave Requests with Workflow data
                 # We need to find the ContentType ID for leave.leaverequest
@@ -718,7 +664,7 @@ def fetch_leave_status_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                     LIMIT 5
                 """
                 
-                result = connection.execute(text(sql), {"email": emp_email, "t_id": tenant_db_id, "ct_id": ct_id})
+                result = connection.execute(text(sql), {"email": emp_email, "t_id": tenant_id, "ct_id": ct_id})
                 rows = result.fetchall()
                 
                 if not rows:
@@ -734,20 +680,18 @@ def fetch_leave_status_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                     reports.append(status_line)
                 
                 result_text = "Here is the status of your recent leave requests:\n\n" + "\n\n".join(reports)
-                # return ToolMessage(content=result_text, tool_call_id=tid)
-                return result_text
+                return ToolMessage(content=result_text, tool_call_id=tid)
         finally:
             engine.dispose()
 
     except Exception as e:
         log_error(f"Failed to fetch leave status: {str(e)}", tenant_id, conversation_id)
-        # return ToolMessage(content=f"Error fetching leave status: {str(e)}", tool_call_id=tid)
-        return f"Error fetching leave status: {str(e)}"
+        return ToolMessage(content=f"Error fetching leave status: {str(e)}", tool_call_id=tid)
 
 
 
 @tool("search_travel_deals_tool", args_schema=TravelSearchRequest)
-def search_travel_deals_tool(runtime: ToolRuntime[Context], **kwargs)-> str: 
+def search_travel_deals_tool(config: RunnableConfig, **kwargs):
     """Uses Tavily to search for the best flight and hotel deals for a vacation."""
     
     tid = kwargs.get('current_tool_id')
@@ -755,8 +699,8 @@ def search_travel_deals_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
     start = kwargs.get('departureDate')
     end = kwargs.get('returnDate')
 
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
     
     # Construct a high-quality search query for Tavily
     query = f"cheapest flights and top rated hotels in {dest} from {start} to {end} for vacation"
@@ -775,27 +719,26 @@ def search_travel_deals_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                 "content": res.get("content")[:500] # Snippet for context
             })
 
-        # return ToolMessage(
-        #     content=f"Found these travel options in {dest}:\n{str(formatted_results)}",
-        #     tool_call_id=tid
-        # )
-        return f"Found these travel options in {dest}:\n{str(formatted_results)}"
+        return ToolMessage(
+            content=f"Found these travel options in {dest}:\n{str(formatted_results)}",
+            tool_call_id=tid
+        )
     except Exception as e:
         return f"Travel search failed: {str(e)}"   
 
 
 
 @tool("create_customer_profile_tool", args_schema=CustomerProfileInput)
-def create_customer_profile_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
+def create_customer_profile_tool(config: RunnableConfig, **kwargs):
     """
     Creates a new customer profile in the PostgreSQL database.
     Generates a unique 10-digit account number and returns it.
     """
     tid = kwargs.get('current_tool_id') or "unknown_id"
-    tenant_code = runtime.context.tenant_id  # Assuming tenant_code is same as tenant_id for lookup
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    tenant_code = config["configurable"].get("tenant_id", "unknown")  # Assuming tenant_code is same as tenant_id for lookup
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
     
     first_name = kwargs.get('first_name')
     last_name = kwargs.get('last_name')
@@ -835,10 +778,10 @@ def create_customer_profile_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
             with engine.connect() as connection:
                 # 1. Resolve Tenant ID
                 t_query = text("SELECT id FROM org_tenant WHERE code = :code")
-                tenant_res = connection.execute(t_query, {"code": tenant_code}).fetchone()
-                if not tenant_res:
+                tenant_id = connection.execute(t_query, {"code": tenant_code}).fetchone()
+                if not tenant_id:
                     return ToolMessage(content=f"Error: Tenant '{tenant_code}' not found.", tool_call_id=tid)
-                tenant_db_id = tenant_res[0]
+                tenant_id = tenant_id[0]
 
                 # 2. Insert Customer
                 sql = """
@@ -856,20 +799,18 @@ def create_customer_profile_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                 result = connection.execute(text(sql), {
                     "cid": cust_id, "fn": first_name, "ln": last_name, "email": email, "phone": phone,
                     "acc": account_num, "gender": gender, "nat": nationality, "occ": occupation, "dob": dob,
-                    "tid": tenant_db_id
+                    "tid": tenant_id
                 })
                 connection.commit()
                 
                 msg = f"Successfully created customer profile for {first_name} {last_name}.\nAccount Number: **{account_num}**\nCustomer ID: {cust_id}"
-                # return ToolMessage(content=msg, tool_call_id=tid)
-                return msg
+                return ToolMessage(content=msg, tool_call_id=tid)
         finally:
             engine.dispose()
 
     except Exception as e:
         log_error(f"Failed to create customer profile: {str(e)}", tenant_id, conversation_id)
-        # return ToolMessage(content=f"Error creating customer profile: {str(e)}", tool_call_id=tid)
-        return f"Error creating customer profile: {str(e)}"
+        return ToolMessage(content=f"Error creating customer profile: {str(e)}", tool_call_id=tid)
 
 
 def init_sql_agent(state: State, llm):
@@ -978,18 +919,18 @@ def init_sql_agent(state: State, llm):
         return None
 
 @tool("get_customer_details_tool", args_schema=CustomerDetailsInput)
-def get_customer_details_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
+def get_customer_details_tool(config: RunnableConfig, **kwargs):
     """
     Retrieves a customer's details from the PostgreSQL database using phone number, email, or account number.
     """
-    tenant_code = runtime.context.tenant_id
+    tenant_code = config["configurable"].get("tenant_id")
     tenant_id = tenant_code if tenant_code else "unknown"
-    conversation_id = runtime.context.conversation_id
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
     val = kwargs.get('phone_or_email')
     acc_num = kwargs.get('account_number')
     log_info(f"get_customer_details_tool invoked with args: {val}, {acc_num}", tenant_id, conversation_id)
     tid = kwargs.get('current_tool_id') or "unknown_id"
-    db_uri = runtime.context.db_uri
+    db_uri = config["configurable"].get("db_uri")
     
     
     if not val and not acc_num:
@@ -1009,8 +950,8 @@ def get_customer_details_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
             with engine.connect() as connection:
                 # 1. Resolve Tenant ID
                 t_query = text("SELECT id FROM org_tenant WHERE code = :code")
-                tenant_res = connection.execute(t_query, {"code": tenant_code}).fetchone()
-                tenant_db_id = tenant_res[0] if tenant_res else None
+                tenant_id = connection.execute(t_query, {"code": tenant_code}).fetchone()
+                tenant_id = tenant_id[0] if tenant_id else None
 
                 sql = """
                     SELECT customer_id, first_name, last_name, email, phone_number, account_number, gender, occupation, nationality
@@ -1019,7 +960,7 @@ def get_customer_details_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                     AND tenant_id = :tid
                 """
                 
-                res = connection.execute(text(sql), {"val": val, "acc": acc_num, "tid": tenant_db_id}).fetchone()
+                res = connection.execute(text(sql), {"val": val, "acc": acc_num, "tid": tenant_id}).fetchone()
                 
                 if not res:
                     return ToolMessage(content="No customer found with the provided details.", tool_call_id=tid)
@@ -1033,30 +974,28 @@ def get_customer_details_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                     f"- Occupation: {res.occupation}\n"
                     f"- Nationality: {res.nationality}"
                 )
-                # return ToolMessage(content=details, tool_call_id=tid)
-                return details
+                return ToolMessage(content=details, tool_call_id=tid)
         finally:
             engine.dispose()
 
     except Exception as e:
         log_error(f"Failed to retrieve customer details: {str(e)}", tenant_id, conversation_id)
-        # return ToolMessage(content=f"Error retrieving customer details: {str(e)}", tool_call_id=tid)
-        return f"Error retrieving customer details: {str(e)}"
+        return ToolMessage(content=f"Error retrieving customer details: {str(e)}", tool_call_id=tid)
 
 @tool("update_customer_tool", args_schema=UpdateCustomerProfileInput)
-def update_customer_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
+def update_customer_tool(config: RunnableConfig, **kwargs):
     """
     Updates the customer's profile details (phone, email, occupation, etc.) in the PostgreSQL database.
     """
-    tenant_code = runtime.context.tenant_id
+    tenant_code = config["configurable"].get("tenant_id")
     tenant_id = tenant_code if tenant_code else "unknown"
-    conversation_id = runtime.context.conversation_id
-    target_email = kwargs.get('email') or runtime.context.emp_id
+    conversation_id = config["configurable"].get("conversation_id", "unknown")
+    target_email = kwargs.get('email') or config["configurable"].get("employee_id")
     target_phone = kwargs.get('phone_number')
     log_info(f"update_customer_tool invoked with args: {target_email}, {target_phone}", tenant_id, conversation_id)
 
     tid = kwargs.get('current_tool_id') or "unknown_id"
-    db_uri = runtime.context.db_uri
+    db_uri = config["configurable"].get("db_uri")
     
     # We need a way to identify which customer to update. 
     # Since this is likely the current user, we assume their email/phone is in the context or provided.
@@ -1085,12 +1024,12 @@ def update_customer_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
             with engine.connect() as connection:
                 # 1. Resolve Tenant ID
                 t_query = text("SELECT id FROM org_tenant WHERE code = :code")
-                tenant_res = connection.execute(t_query, {"code": tenant_code}).fetchone()
-                tenant_db_id = tenant_res[0] if tenant_res else None
+                tenant_id = connection.execute(t_query, {"code": tenant_code}).fetchone()
+                tenant_id = tenant_id[0] if tenant_id else None
 
                 # 2. Build Dynamic Update SQL
                 set_clauses = []
-                params = {"tid": tenant_db_id, "target_email": target_email, "target_phone": target_phone}
+                params = {"tid": tenant_id, "target_email": target_email, "target_phone": target_phone}
                 
                 for key, val in update_data.items():
                     set_clauses.append(f"{key} = :{key}")
@@ -1110,31 +1049,25 @@ def update_customer_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
                     return ToolMessage(content="No customer record found to update.", tool_call_id=tid)
                 
                 msg = f"Successfully updated your profile: {', '.join(update_data.keys())}."
-                # return ToolMessage(content=msg, tool_call_id=tid)
-                return msg
+                return ToolMessage(content=msg, tool_call_id=tid)
         finally:
             engine.dispose()
 
     except Exception as e:
        log_error(f"Failed to update customer profile: {str(e)}", tenant_id, conversation_id)
-       return f"Error updating customer profile: {str(e)}"
-       
-    #    return ToolMessage(content=f"Error updating customer profile: {str(e)}", tool_call_id=tid)
-    # 
-      
+       return ToolMessage(content=f"Error updating customer profile: {str(e)}", tool_call_id=tid)
 
 
 
 
 @tool("sql_query_tool", args_schema=SQLQueryInput)
-def sql_query_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
+def sql_query_tool(query: Any, config: RunnableConfig, **kwargs) -> dict:
     """
     Useful for answering questions requiring data from a SQL database.
     """
-    query = kwargs.get('query')
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("thread_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
 
     log_info(f"sql_query_tool invoked with query: {query}", tenant_id, conversation_id)
 
@@ -1198,14 +1131,13 @@ def sql_query_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
 
 
 @tool("pdf_retrieval_tool", args_schema=ToolInput)
-def pdf_retrieval_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
+def pdf_retrieval_tool(query: str, config: RunnableConfig, **kwargs) -> dict:
     """
     Performs a document query using the pre-initialized FAISS vector store.
     """
-    query = kwargs.get('query')
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    vector_store_path = runtime.context.vector_store_path
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("thread_id", "unknown")
+    vector_store_path = config["configurable"].get("vector_store_path")
     
     log_info(f"pdf_retrieval_tool invoked with query: {query}", tenant_id, conversation_id)
 
@@ -1240,23 +1172,28 @@ def pdf_retrieval_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
 
 
 @tool("web_search_tool", args_schema=ToolInput)
-def web_search_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
+def web_search_tool(query: str, config: RunnableConfig, **kwargs) -> dict:
     """
     Performs web search using Tavily.
     """
-    query = kwargs.get('query')
-    # tenant_config = config["configurable"].get("tenant_config", {}) # Not in Context
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
+    tenant_config = config["configurable"].get("tenant_config", {})
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("thread_id", "unknown")
 
     log_info(f"web_search_tool invoked with query: {query}", tenant_id, conversation_id)
     from urllib.parse import urlparse
 
-    # 1. Collect priority domains from context if available
+    # 1. Collect priority domains from config
     priority_domains = []
-    # Note: Context doesn't currently expose tenant_knowledge_base or tenant_website
-    # We might need to fetch this from elsewhere or update Context definition.
-    # For now, we'll skip priority domains if not available.
+    for field in ["tenant_knowledge_base", "tenant_website"]:
+        url = tenant_config.get(field)
+        if url:
+            try:
+                domain = urlparse(url).netloc
+                if domain and domain not in priority_domains:
+                    priority_domains.append(domain)
+            except Exception:
+                continue
 
     # 2. Targeted Search
     search_results = []
@@ -1310,16 +1247,14 @@ def web_search_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
 
 
 @tool("generate_visualization_tool", args_schema=VisualizationInput)
-def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
+def generate_visualization_tool(query: str, config: RunnableConfig, data: Any = None, **kwargs) -> dict:
     """
     Generates a data visualization based on a natural language query.
     """
-    query = kwargs.get('query')
-    data = kwargs.get('data')
-    # tenant_config = config["configurable"].get("tenant_config", {}) # Not in Context
-    tenant_id = runtime.context.tenant_id
-    conversation_id = runtime.context.conversation_id
-    db_uri = runtime.context.db_uri
+    tenant_config = config["configurable"].get("tenant_config", {})
+    tenant_id = config["configurable"].get("tenant_id", "unknown")
+    conversation_id = config["configurable"].get("thread_id", "unknown")
+    db_uri = config["configurable"].get("db_uri")
     tid = kwargs.get('current_tool_id') or "unknown_id"
 
     log_info(f"Generating Visualization for query: '{query}'", tenant_id, conversation_id)
@@ -1461,20 +1396,20 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
      
     # return {"visualization_result": {"analysis": analysis_text, "image_base64": image_base64}}   
     log_info(f"Successfully generated plot image. Base64 size: {len(image_base64)} bytes.", tenant_id, conversation_id)
-    return f"Visualization generated successfully. Analysis: {analysis_text}"
-    # return Command(
-    #     update={
-    #         "visualization_image": image_base64,
-    #         "visualization_analysis": analysis_text,
-    #         "messages": [
-    #             ToolMessage(
-    #                 content=f"Visualization generated successfully. Analysis: {analysis_text}",
-    #                 tool_call_id=tid,
-    #                 name="generate_visualization_tool"
-    #             )
-    #         ]
-    #     }
-    # )
+
+    return Command(
+        update={
+            "visualization_image": image_base64,
+            "visualization_analysis": analysis_text,
+            "messages": [
+                ToolMessage(
+                    content=f"Visualization generated successfully. Analysis: {analysis_text}",
+                    tool_call_id=tid,
+                    name="generate_visualization_tool"
+                )
+            ]
+        }
+    )
 
         
        

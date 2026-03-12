@@ -139,7 +139,7 @@ def fetch_available_leave_types_tool(runtime: ToolRuntime[Context], **kwargs)  -
     """
     # 1. Get the ID we injected in tool_node for the response message
   
-    
+    log_info(f"Invoked fetch_available_leave_types_tool with args: {kwargs}", runtime.context.tenant_id, runtime.context.conversation_id)
     
     emp_id = runtime.context.emp_id  
     query = LeaveTypeRequest(**kwargs)

@@ -363,27 +363,28 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
         - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
            
         ### Output Format:
-    You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
-    Ensure your response is helpful, professional, and entirely in natural language. 
-    NEVER output raw JSON or internal tool details to the user. 
-    NEVER state that you are calling a tool; just call it.
+    When you have the final information to reply to the user, you MUST return ONLY a valid JSON object in the 'answer' field. Do not include any text outside the JSON block.
+    
+    Ensure your final response is helpful, professional, and entirely in natural language. 
+    NEVER output raw JSON, internal tool details, or tool call IDs in the final 'answer' field. 
+    NEVER state that you are calling a tool; just call it using the native tool calling mechanism.
+    
     ```json
     {{
     "answer": "A friendly, clear, and professional response in natural language",
     }}
     ```
     
-    IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text.
+    IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text. Tool calls are NOT considered 'text outside the JSON block'.
         """
 
 
 golden_rules = (
                 "\n\nSTRICT OPERATING RULES:\n"
-                "1. ALWAYS provide your final response to the user in natural, friendly, and professional language.\n"
-                "2. NEVER output raw JSON, tool call IDs, or internal structural artifacts to the user.\n"
-                "3. PROTOCOL ADHERENCE IS MANDATORY: If a protocol (like LEAVE REQUESTS) requires calling a tool first, you MUST call that tool using the native tool-calling mechanism. Do not hallucinate data or skip steps.\n"
-                "4. NO JSON LEAKAGE: Do not manually write JSON that looks like a tool call in your response text.\n"
-                "5. If you are waiting for tool results, stay in character and provide a brief, friendly status update if needed, but the priority is to execute the tool call."
+                "1. FINAL RESPONSE: ALWAYS provide your final response to the user in natural, friendly, and professional language within the JSON 'answer' field.\n"
+                "2. NO SYSTEM LEAKAGE: NEVER output raw JSON, tool call IDs, or internal structural artifacts to the user's view.\n"
+                "3. NATIVE TOOL CALLING: Adhere to protocols by calling tools natively. Do not simulate a tool call by writing JSON text. Only provide the JSON 'answer' block once you have the results you need.\n"
+                "4. If you need a tool, execute the tool call immediately. Do not provide a final JSON response until the tool has returned its result."
             )
 
 current_year = datetime.now().year
@@ -1307,9 +1308,9 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
                     
                 if final_state.get("visualization_analysis"):
                     result = result+"\n"+final_state['visualization_analysis']
-                    
-                logger.info(f"LLM Response Extracted: {extracted_text}")
-                return result
+                final_result = result.replace("ATB", "Gatik")
+                logger.info(f"LLM Response Extracted: {final_result}")
+                return final_result
 
             else:
                 fallback = "I apologize, but I encountered an internal error processing your request."

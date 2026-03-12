@@ -1,73 +1,43 @@
-2026-03-11 22:07:21,921 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Starting message processing pipeline
-2026-03-11 22:07:21,922 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng]  alukett Employee ID: obinna.kelechi.adewale@dignityconcept.tech-message Content: cAN i GET A LOAN 
-2026-03-11 22:07:21,922 [INFO] HR_AGENT:initialize_vector_store:475 - [VectorStore | Tenant: DMC] Initializing from disk (read-only).
-2026-03-11 22:07:21,923 [INFO] HR_AGENT:initialize_vector_store:480 - [VectorStore | Tenant: DMC] Embeddings ready.
-2026-03-11 22:07:21,925 [INFO] HR_AGENT:initialize_vector_store:492 - [VectorStore | Tenant: DMC] Loaded successfully. index_size=7
-2026-03-11 22:07:21,934 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Vector store document count: 7
-2026-03-11 22:07:21,941 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Fetching tenant AI config
-2026-03-11 22:07:23,013 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Fetched tenant AI config
-2026-03-11 22:07:23,459 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Prompt template found: """
+2026-03-12 09:12:47,081 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Starting message processing pipeline
+2026-03-12 09:12:47,081 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing]  alukett Employee ID: obinna.kelechi.adewale@dignityconcept.tech-message Content: I need to go on leave 
+2026-03-12 09:12:47,082 [INFO] HR_AGENT:initialize_vector_store:561 - [VectorStore | Tenant: DMC] Initializing from disk (read-only).
+2026-03-12 09:12:47,082 [INFO] HR_AGENT:initialize_vector_store:566 - [VectorStore | Tenant: DMC] Embeddings ready.
+2026-03-12 09:12:47,083 [INFO] HR_AGENT:initialize_vector_store:578 - [VectorStore | Tenant: DMC] Loaded successfully. index_size=7
+2026-03-12 09:12:47,084 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Vector store document count: 7
+2026-03-12 09:12:47,084 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Fetching tenant AI config
+2026-03-12 09:12:48,096 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Fetched tenant AI config
+2026-03-12 09:12:48,435 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Prompt template found: """
   You are Damilola, the AI-powered virtual as...
-2026-03-11 22:07:24,224 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] ✅ DB Connected. Tenant record found: ID=1, Name='DMC', Code='DMC'.
-2026-03-11 22:07:24,388 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] ✅ DB Connected. Tenant record found: ID=1, Name='DMC', Code='DMC'.
-2026-03-11 22:07:24,889 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] 📊 Sample Prompt Record: ID=1, Name='standard'
-2026-03-11 22:07:25,221 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] ✅ FAS Directory confirmed at: C:\Users\Pro\Desktop\PROJECT\TEST\chat\faiss_dbs\DMC
-2026-03-11 22:07:25,221 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] ✅ Index file found: C:\Users\Pro\Desktop\PROJECT\TEST\chat\faiss_dbs\DMC\index.faiss
-2026-03-11 22:07:25,222 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddDDDDDDDng] Tenant config prepared. DB URI present: True
-2026-03-11 22:07:29,049 [INFO] HR_AGENT:get_model:104 - ✅ Model and tools initialized successfully.
-2026-03-11 22:07:30,759 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-11 22:07:30,907 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001A0D2592D70>
-2026-03-11 22:07:30,907 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x000001A0FA88B800> server_hostname='ollama.com' timeout=60.0
-2026-03-11 22:07:31,107 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001A0D25A0170>
-2026-03-11 22:07:31,108 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-11 22:07:31,109 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-11 22:07:31,109 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-11 22:07:31,110 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-11 22:07:31,110 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-11 22:07:37,113 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=fe890b50-6332-4f8d-8cc1-6638f0291f04; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'63f0b4313846d2ae7fe94ef420176a6175c20123'), (b'x-build-time', b'2026-03-11T13:49:24-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'9b4611b3-2620-43cc-b54b-3e4a02460be6'), (b'Content-Length', b'3562'), (b'date', b'Wed, 11 Mar 2026 21:07:37 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'd7aa63349537aef8b7bbbadc8f79780d/10220246254532420550'), (b'traceparent', b'00-d7aa63349537aef8b7bbbadc8f79780d-8dd59bd1be6be3c6-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-11 22:07:37,114 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-11 22:07:37,114 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-11 22:07:37,190 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-11 22:07:37,191 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-11 22:07:37,192 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-11 22:07:37,193 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-11 22:07:37,194 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-11 22:07:37,875 [INFO] HR_AGENT:process_message:1170 -  Raw LLM response  : {'messages': [HumanMessage(content='cAN i GET A LOAN ', additional_kwargs={}, response_metadata={}, id='a1931b11-68eb-43bb-9a05-0f80293e7235'), AIMessage(content='{\n  "answer": "Sure thing! ATB offers a range of loan products to suit different needs, including personal loans, home loans, auto loans, and small‑business loans. Here’s a quick overview:\\n\\n**1. Personal Loans**\\n- **Purpose:** Debt consolidation, home improvements, education, or any personal expense.\\n- **Typical Amount:** ₦50,000 – ₦5,000,000.\\n- **Repayment Terms:** 12\u202f–\u202f60 months.\\n- **Eligibility:** Steady monthly income (usually at least ₦150,000), good credit history, and a valid ID.\\n\\n**2. Home Loans**\\n- **Purpose:** Purchase of a new home or mortgage refinancing.\\n- **Typical Amount:** Up to 80\u202f% of the property value.\\n- **Repayment Terms:** 5\u202f–\u202f30 years.\\n- **Eligibility:** Proven stable employment, property valuation, and a minimum credit score.\\n\\n**3. Auto Loans**\\n- **Purpose:** Purchase of a new or used vehicle.\\n- **Typical Amount:** Up to 90\u202f% of the car’s price.\\n- **Repayment Terms:** 12\u202f–\u202f84 months.\\n- **Eligibility:** Valid driver’s license, proof of income, and a good credit record.\\n\\n**4. Small‑Business Loans**\\n- **Purpose:** Working capital, equipment purchase, or business expansion.\\n- **Typical Amount:** ₦500,000 – ₦20,000,000.\\n- **Repayment Terms:** 12\u202f–\u202f48 months.\\n- **Eligibility:** Business registration documents, at least 2 years of operating history, and satisfactory financial statements.\\n\\n**How to Apply:**\\n1. **Gather Required Documents** – ID, proof of income (salary slips or bank statements), and any relevant supporting paperwork (e.g., property appraisal, business registration).\\n2. **Visit Our Online Portal or a Branch** – You can start the application on the ATB mobile app/website, or speak to a loan officer at your nearest branch.\\n3. **Complete the Application Form** – Provide personal details, loan amount, and purpose.\\n4. **Submit Documents** – Upload scans or bring originals if you’re at a branch.\\n5. **Approval Process** – Our team will review your application, usually within 2‑5 business days, and may contact you for any additional information.\\n6. **Disbursement** – Once approved, funds are transferred to your designated account within 24‑48 hours.\\n\\nIf you’d like to start an application now, you can click the “Apply for a Loan” button on the ATB website or download the ATB mobile app and navigate to the “Loans” section. Feel free to let us know if you need help with a specific loan type or have any other questions."\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019cdeb9-e1ef-7563-ae50-2ef83587b4e8-0', tool_calls=[], invalid_tool_calls=[])]}
-2026-03-11 22:07:37,876 [INFO] HR_AGENT:process_message:1178 - LLM response Process message : {
-  "answer": "Sure thing! ATB offers a range of loan products to suit different needs, including personal loans, home loans, auto loans, and small‑business loans. Here’s a quick overview:\n\n**1. Personal Loans**\n- **Purpose:** Debt consolidation, home improvements, education, or any personal expense.\n- **Typical Amount:** ₦50,000 – ₦5,000,000.\n- **Repayment Terms:** 12 – 60 months.\n- **Eligibility:** Steady monthly income (usually at least ₦150,000), good credit history, and a valid ID.\n\n**2. Home Loans**\n- **Purpose:** Purchase of a new home or mortgage refinancing.\n- **Typical Amount:** Up to 80 % of the property value.\n- **Repayment Terms:** 5 – 30 years.\n- **Eligibility:** Proven stable employment, property valuation, and a minimum credit score.\n\n**3. Auto Loans**\n- **Purpose:** Purchase of a new or used vehicle.\n- **Typical Amount:** Up to 90 % of the car’s price.\n- **Repayment Terms:** 12 – 84 months.\n- **Eligibility:** Valid driver’s license, proof of income, and a good credit record.\n\n**4. Small‑Business Loans**\n- **Purpose:** Working capital, equipment purchase, or business expansion.\n- **Typical Amount:** ₦500,000 – ₦20,000,000.\n- **Repayment Terms:** 12 – 48 months.\n- **Eligibility:** Business registration documents, at least 2 years of operating history, and satisfactory financial statements.\n\n**How to Apply:**\n1. **Gather Required Documents** – ID, proof of income (salary slips or bank statements), and any relevant supporting paperwork (e.g., property appraisal, business registration).\n2. **Visit Our Online Portal or a Branch** – You can start the application on the ATB mobile app/website, or speak to a loan officer at your nearest branch.\n3. **Complete the Application Form** – Provide personal details, loan amount, and purpose.\n4. **Submit Documents** – Upload scans or bring originals if you’re at a branch.\n5. **Approval Process** – Our team will review your application, usually within 2‑5 business days, and may contact you for any additional information.\n6. **Disbursement** – Once approved, funds are transferred to your designated account within 24‑48 hours.\n\nIf you’d like to start an application now, you can click the “Apply for a Loan” button on the ATB website or download the ATB mobile app and navigate to the “Loans” section. Feel free to let us know if you need help with a specific loan type or have any other questions."
+2026-03-12 09:12:49,121 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] ✅ DB Connected. Tenant record found: ID=1, Name='DMC', Code='DMC'.
+2026-03-12 09:12:49,121 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] ✅ DB Connected. Tenant record found: ID=1, Name='DMC', Code='DMC'.
+2026-03-12 09:12:49,466 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] 📊 Sample Prompt Record: ID=1, Name='standard'
+2026-03-12 09:12:49,802 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] ✅ FAS Directory confirmed at: C:\Users\Pro\Desktop\PROJECT\TEST\chat\faiss_dbs\DMC
+2026-03-12 09:12:49,803 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] ✅ Index file found: C:\Users\Pro\Desktop\PROJECT\TEST\chat\faiss_dbs\DMC\index.faiss
+2026-03-12 09:12:49,803 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: strdddeeddwing] Tenant config prepared. DB URI present: True
+2026-03-12 09:12:53,693 [INFO] HR_AGENT:get_model:104 - ✅ Model and tools initialized successfully.
+2026-03-12 09:12:54,962 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
+2026-03-12 09:12:55,259 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001B77A9B4160>
+2026-03-12 09:12:55,260 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x000001B77A8AA960> server_hostname='ollama.com' timeout=60.0
+2026-03-12 09:12:55,526 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000001B77A9B4050>
+2026-03-12 09:12:55,527 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
+2026-03-12 09:12:55,528 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
+2026-03-12 09:12:55,528 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
+2026-03-12 09:12:55,529 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
+2026-03-12 09:12:55,530 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
+2026-03-12 09:12:59,742 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=ce872356-90d7-45c1-857b-1a5729ba6a90; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'9ea3490758cd3b02af45847debc3a7c4bf6266b3'), (b'x-build-time', b'2026-03-11T19:56:15-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'603b52ea-0cb5-48f3-be2c-ad023fc297e4'), (b'Content-Length', b'1248'), (b'date', b'Thu, 12 Mar 2026 08:13:00 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-d2079a26cc1b9aa4273799d9514ecc81-f1bc105076de9aa5-00'), (b'x-cloud-trace-context', b'd2079a26cc1b9aa4273799d9514ecc81/17418815396539964069'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
+2026-03-12 09:12:59,743 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
+2026-03-12 09:12:59,744 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
+2026-03-12 09:12:59,744 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
+2026-03-12 09:12:59,745 [DEBUG] httpcore.http11:trace:47 - response_closed.started
+2026-03-12 09:12:59,745 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
+2026-03-12 09:12:59,745 [DEBUG] httpcore.connection:trace:47 - close.started
+2026-03-12 09:12:59,746 [DEBUG] httpcore.connection:trace:47 - close.complete
+2026-03-12 09:13:00,426 [INFO] HR_AGENT:process_message:1281 -  Raw LLM response  : {'messages': [HumanMessage(content='I need to go on leave ', additional_kwargs={}, response_metadata={}, id='b7269a72-4926-444f-b6b0-14ba779e5f4c'), AIMessage(content='{\n  "tool_name": "fetch_available_leave_types_tool",\n  "parameters": {}\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce11b-1543-7d00-a4c6-525c86123903-0', tool_calls=[], invalid_tool_calls=[])]}
+2026-03-12 09:13:00,427 [INFO] HR_AGENT:process_message:1289 - LLM response Process message : {
+  "tool_name": "fetch_available_leave_types_tool",
+  "parameters": {}
 }
-2026-03-11 22:07:37,877 [INFO] HR_AGENT:process_message:1217 - LLM Response Extracted: Sure thing! ATB offers a range of loan products to suit different needs, including personal loans, home loans, auto loans, and small‑business loans. Here’s a quick overview:
-
-**1. Personal Loans**
-- **Purpose:** Debt consolidation, home improvements, education, or any personal expense.
-- **Typical Amount:** ₦50,000 – ₦5,000,000.
-- **Repayment Terms:** 12 – 60 months.
-- **Eligibility:** Steady monthly income (usually at least ₦150,000), good credit history, and a valid ID.
-
-**2. Home Loans**
-- **Purpose:** Purchase of a new home or mortgage refinancing.
-- **Typical Amount:** Up to 80 % of the property value.
-- **Repayment Terms:** 5 – 30 years.
-- **Eligibility:** Proven stable employment, property valuation, and a minimum credit score.
-
-**3. Auto Loans**
-- **Purpose:** Purchase of a new or used vehicle.
-- **Typical Amount:** Up to 90 % of the car’s price.
-- **Repayment Terms:** 12 – 84 months.
-- **Eligibility:** Valid driver’s license, proof of income, and a good credit record.
-
-**4. Small‑Business Loans**
-- **Purpose:** Working capital, equipment purchase, or business expansion.
-- **Typical Amount:** ₦500,000 – ₦20,000,000.
-- **Repayment Terms:** 12 – 48 months.
-- **Eligibility:** Business registration documents, at least 2 years of operating history, and satisfactory financial statements.
-
-**How to Apply:**
-1. **Gather Required Documents** – ID, proof of income (salary slips or bank statements), and any relevant supporting paperwork (e.g., property appraisal, business registration).
-2. **Visit Our Online Portal or a Branch** – You can start the application on the ATB mobile app/website, or speak to a loan officer at your nearest branch.
-3. **Complete the Application Form** – Provide personal details, loan amount, and purpose.
-4. **Submit Documents** – Upload scans or bring originals if you’re at a branch.
-5. **Approval Process** – Our team will review your application, usually within 2‑5 business days, and may contact you for any additional information.
-6. **Disbursement** – Once approved, funds are transferred to your designated account within 24‑48 hours.
-
-If you’d like to start an application now, you can click the “Apply for a Loan” button on the ATB website or download the ATB mobile app and navigate to the “Loans” section. Feel free to let us know if you need help with a specific loan type or have any other questions.
+2026-03-12 09:13:00,427 [INFO] HR_AGENT:process_message:1311 - LLM Response Extracted: {
+  "tool_name": "fetch_available_leave_types_tool",
+  "parameters": {}
+}

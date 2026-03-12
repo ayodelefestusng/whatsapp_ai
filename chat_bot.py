@@ -50,7 +50,7 @@ GEMINI_INIT= os.getenv("GEMINI_INIT", "google_genai:gemini-flash-latest")
 # Constants / Fallbacks
 # OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
 # DEFAULT_AGENT_PROMPT = 
-llm_fallback = init_chat_model(GEMINI_INIT)
+llm_fallback = init_chat_model(GEMINI_INIT, temperature=0)
 model = llm_fallback  # Consistent naming for the primary LLM
 _llm = None
 def get_llm_instance(llm_config=None):
@@ -77,13 +77,13 @@ def get_llm_instance(llm_config=None):
         model_name = res[1] or "gemini-1.5-flash"
         
         if "gemini" in name:
-            return ChatGoogleGenerativeAI(model=model_name, api_key=os.getenv("GOOGLE_API_KEY"))
+            return ChatGoogleGenerativeAI(model=model_name, api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
             
         elif "ollama" in name:
             # Initialize OllamaService without local network parameters
             return OllamaService(model=model_name)
             
-    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"))
+    return ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
 
 def get_model():
     """
@@ -228,7 +228,8 @@ GLOBAL_FINAL_ANSWER_PROMPT1 = """You are Damilola, the AI-powered virtual assist
 
     """
 
-GLOBAL_FINAL_ANSWER_PROMPT = """
+
+GLOBAL_FINAL_ANSWER_PROMPTv2 = """
   You are Damilola, the AI-powered virtual assistant for ATB. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
 
     You operate in three modes:
@@ -289,20 +290,105 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
         - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
         - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
            
-        ### Available Tools & Required Arguments:
-        {tool_descriptions}
-
         ### Output Format:
     You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
+    Ensure your response is helpful, professional, and entirely in natural language. 
+    NEVER output raw JSON or internal tool details to the user. 
+    NEVER state that you are calling a tool; just call it.
     ```json
     {{
-    "answer": "Your response to the user",
+    "answer": "A friendly, clear, and professional response in natural language",
     }}
     ```
+    
+    IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text.
         """
 
 
+GLOBAL_FINAL_ANSWER_PROMPT = """
+  You are Damilola, the AI-powered virtual assistant for ATB. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
 
+    You operate in three modes:
+    1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
+    2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe what the chart shows and what it means for the user.
+    3. **HR Assistant**: Respond with empathy, clarity, and professionalism regarding leave, payslips, and workplace policies.
+
+    Your response must be:
+    - **Final**: No follow-up questions or uncertainty.
+    - **Clear and Polite**: Use emotionally intelligent language, especially if the user expresses frustration or confusion.
+    - **Context-Aware**: Avoid mentioning internal systems (e.g., database names or SQL sources) .
+    - **Structured**: Always return your answer in the following JSON format.
+    - **Structured**: use naira sign whne currency us required 
+    do not hallucinate, either use the tool or response that you are not sure if unsure 
+
+        OPERATING PROTOCOLS:
+        
+        PROTOCOL 1: LEAVE REQUESTS
+        - If the user wants to apply for leave, you MUST first call 'fetch_available_leave_types_tool'.
+        - If the user specifies a leave type NOT in the list provided by 'fetch_available_leave_types_tool':
+        1. Politely inform them that '[InvalidType]' is not available for their category.
+        2. Re-list the valid options.
+        3. Do NOT call 'prepare_leave_application_tool' until a valid type is selected.
+        - LEAVE YEAR LOGIC: Ask the user: "Is this leave for the current year or your previous year's carry-over?"
+        Current -> {current_year}, Previous -> {previous_year}.
+        - SUCCESS: After 'submit_leave_application_tool' confirms success, if it was 'Vacation', offer help with travel via 'search_travel_deals_tool'.
+
+        PROTOCOL 2: PAYSLIPS
+        - Once 'get_payslip_tool' returns, inform the user: 'Your payslip has been sent to your email.'
+
+        PROTOCOL 3: HR POLICIES & KNOWLEDGE
+        - For policy questions, use 'pdf_retrieval_tool' to search HR handbooks.
+
+        PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
+        - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
+        - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
+        - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
+        - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
+
+        PROTOCOL 5: PROFILE UPDATES
+        - Use 'update_customer_tool' or 'update_employee_profile_tool'.
+        - If bank name is missing for an account update, ask for it before calling the tool.
+
+        PROTOCOL 6: LEAVE STATUS
+        - Use 'fetch_leave_status_tool' for approvals and pending status.
+
+        CONTEXT:
+        - Current Date: {current_date_str}
+        - Employee ID: {ID}
+        
+             
+
+        Tool Guide:{tool_intent_map}
+        - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
+        - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
+           
+        ### Output Format:
+    You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
+    Ensure your response is helpful, professional, and entirely in natural language. 
+    NEVER output raw JSON or internal tool details to the user. 
+    NEVER state that you are calling a tool; just call it.
+    ```json
+    {{
+    "answer": "A friendly, clear, and professional response in natural language",
+    }}
+    ```
+    
+    IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text.
+        """
+
+
+golden_rules = (
+                "\n\nSTRICT OPERATING RULES:\n"
+                "1. ALWAYS provide your final response to the user in natural, friendly, and professional language.\n"
+                "2. NEVER output raw JSON, tool call IDs, or internal structural artifacts to the user.\n"
+                "3. PROTOCOL ADHERENCE IS MANDATORY: If a protocol (like LEAVE REQUESTS) requires calling a tool first, you MUST call that tool using the native tool-calling mechanism. Do not hallucinate data or skip steps.\n"
+                "4. NO JSON LEAKAGE: Do not manually write JSON that looks like a tool call in your response text.\n"
+                "5. If you are waiting for tool results, stay in character and provide a brief, friendly status update if needed, but the priority is to execute the tool call."
+            )
+
+current_year = datetime.now().year
+previous_year = current_year - 1
+current_date_str = datetime.now().strftime("%Y-%m-%d")
 
 # DEFAULT_TOOL_INTENT_MAP = {
 #     "leave_management": {"tools": ["fetch_available_leave_types_tool", "prepare_leave_application_tool"], "triggers": ["leave", "vacation"]},
@@ -936,7 +1022,9 @@ def assistant_node(state: State, config: RunnableConfig):
         safe_messages = clean_message_history(state["messages"])
         log_info(f"Safe messages: {safe_messages}", tenant_id, conversation_id)
         try:
-            response = llm_with_tools.invoke([SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}")] + safe_messages)
+            # 🛡️ GOLDEN RULES Appendage: Ensure user-friendly output regardless of DB prompt
+            
+            response = llm_with_tools.invoke([SystemMessage(content=f"{system_prompt}\n\n{greeting_instruction}{golden_rules}")] + safe_messages)
             log_info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
         except Exception as e:
             log_error(f"LLM invoke failed: {e}", tenant_id, conversation_id)
@@ -1017,7 +1105,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         if isinstance(vector_store_result, tuple)
         else (vector_store_result, {})
     )
-
+    
     if tenant_vector_store is not None:
         try:
             document_count = tenant_vector_store.index.ntotal
@@ -1058,17 +1146,38 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
     
     if p_res:
         log_info(f"Prompt template found: {p_res[0][:50]}...", tenant_id, conversation_id)
-        system_prompt = p_res[0]
+        agent_prompt = p_res[0]
     else:
         log_warning("No prompt template found in DB. Using global default.", tenant_id, conversation_id)
-        system_prompt = GLOBAL_FINAL_ANSWER_PROMPT    
-  
+        agent_prompt = GLOBAL_FINAL_ANSWER_PROMPT    
+    greeting_instruction = f"Always greet or address the user using their name: {push_name}, if they are starting a conversation or if appropriate."
+    fallback_prompt = "Default fallback prompt or error handling logic here."
+    if agent_prompt:
+        try:
+                
+            system_prompt = agent_prompt.format(
+                
+                current_year=current_year,
+                previous_year=previous_year,
+                current_date_str=current_date_str,
+                ID=employee_id,
+                tool_intent_map=p_res[2] if p_res else tool_guide,
+             
+            )
+        except KeyError as e:
+                logger.error(f"Missing key in prompt template: {e}")
+                system_prompt = fallback_prompt # Fallback to raw if format fails
+    else:
+        # Handle the case where no prompt is found
+        system_prompt = fallback_prompt
+
+
     tenant_config_dict = {
         "tenant_id": tenant_id,
         "employee_id": employee_id,
         "db_uri": db_uri,
         "push_name": push_name,
-        "agent_prompt": p_res[0] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
+        "agent_prompt": agent_prompt,
         "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
         "tool_intent_map": p_res[2] if p_res else tool_guide,
     }
@@ -1138,7 +1247,9 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         #     "vector_store_path": persist_directory
         # }
         
-      
+
+        systematic_prompt = f"{system_prompt}\n\n{greeting_instruction}{golden_rules}"
+
         context = Context(
             tenant_id=tenant_id,
             conversation_id=conversation_id,
@@ -1150,10 +1261,10 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             tool_intent_map=p_res[2] if p_res else tool_guide,
             vector_store_path=persist_directory
         )
-              
+     
         agent = create_agent(
     model=get_model(),
-    system_prompt=system_prompt,
+    system_prompt=systematic_prompt,
     tools=tools,
     context_schema=Context,
     response_format=ToolStrategy(ResponseFormat),
@@ -1171,40 +1282,23 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         
         # Correctly access the final answer from the messages in the state
         messages = final_state.get("messages", [])
-        # if messages:
-        current_answer = messages[-1].content if messages else ""
+        # Use extract_final_answer for a more robust extraction
+        current_answer = extract_final_answer(messages[-1]) if messages else ""
             
         try:
             logger.info(f"LLM response Process message : {current_answer}")
             
-            # 1. Extraction Logic: Handle objects (ResponseFormat), dictionaries, or JSON strings
             if current_answer:
-                # If it's the ResponseFormat object
-                if hasattr(current_answer, 'answer'):
-                    extracted_text = current_answer.answer
-                elif hasattr(current_answer, 'punny_response'):
-                    extracted_text = current_answer.punny_response
-                # If it's already a dictionary
-                elif isinstance(current_answer, dict):
-                    extracted_text = current_answer.get("answer", current_answer.get("punny_response", str(current_answer)))
-                # If it's a string, try to parse as JSON in case it's a JSON-formatted string
-                elif isinstance(current_answer, str):
-                    try:
-                        # Clean up common AI markdown wrappers
-                        cleaned_str = re.sub(r"```json\s*|\s*```", "", current_answer.strip())
-                        data = json.loads(cleaned_str)
-                        if isinstance(data, dict):
-                            extracted_text = data.get("answer", data.get("punny_response", current_answer))
-                        else:
-                            extracted_text = current_answer
-                    except (json.JSONDecodeError, AttributeError):
-                        extracted_text = current_answer
+                # 🛡️ CRITICAL: If the extracted answer still looks like a tool call, suppress it
+                if '"tool":' in str(current_answer) or '"name":' in str(current_answer):
+                     logger.warning(f"Detected residual tool call in extracted answer: {current_answer}")
+                     extracted_text = "I am processing your request. Please hold on."
                 else:
-                    extracted_text = str(current_answer)
-                    
+                     extracted_text = str(current_answer)
+
                 # 2. Build the result dictionary
-                # result = {"answer": extracted_text}
                 result = extracted_text
+                
                 # Add visualization fields if present in final_state
                 if final_state.get("visualization_image"):
                     logger.info(f"Visualization Image: {final_state['visualization_image']}")

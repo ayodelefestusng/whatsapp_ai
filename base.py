@@ -77,7 +77,7 @@ class PayslipExplainResponse(BaseModel):
 
 class LeaveTypeRequest(BaseModel):
     employee_id: Optional[str] = Field(None, description="The ID of the employee")
-    current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
+    # current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
 class PrepareLeaveApplicationRequest(BaseModel):
     employeeID: str
     leaveTypeName: str

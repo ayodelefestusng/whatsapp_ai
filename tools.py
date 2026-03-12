@@ -1130,12 +1130,15 @@ def update_customer_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
 def sql_query_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
     """
     Useful for answering questions requiring data from a SQL database.
+    **CRITICAL**: Pass ONLY a natural language question (e.g., 'List all employees hired in January') as the 'query' argument. 
+    NEVER generate SQL yourself; the tool handles schema discovery and SQL generation internally.
     """
     query = kwargs.get('query')
     tenant_id = runtime.context.tenant_id
     conversation_id = runtime.context.conversation_id
     db_uri = runtime.context.db_uri
-
+    tenant_name = tenant_id  # Assuming tenant_name is same as tenant_id for prompt purposes
+    tenant_code = tenant_id  # Assuming tenant_code is same as tenant_id for prompt purposes
     log_info(f"sql_query_tool invoked with query: {query}", tenant_id, conversation_id)
 
     try:
@@ -1159,19 +1162,39 @@ def sql_query_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
         sql_tools = toolkit.get_tools()
 
         SQL_SYSTEM_PROMPT = """
-            You are an agent designed to interact with a SQL database. Given an input question,
-            create a syntactically correct {dialect} query, execute it, and return the answer.
+You are an expert data analyst assistant for the tenant '{tenant_name}' (Code: {tenant_code}). Your task is to:
+1. Search the database schema to find the MOST relevant tables for the user's question.
+2. Create a syntactically correct {dialect} query to answer the question. Only query data relevant to `tenant_id={tenant_id}` if the table has a `tenant_id` column.
+3. Execute the query and capture the results.
+4. Return your final answer EXCLUSIVELY as a JSON object inside a code block.
 
-            - Query only necessary columns.
-            - DO NOT make any DML statements.
-            - ONLY query columns with simple text or numerical data.
-            - Return your final answer as a JSON object with keys: "analysis" and "data".
-            """
+CRITICAL INSTRUCTIONS TO PREVENT LOOPS:
+- DO NOT call `sql_db_list_tables` more than once!
+- After receiving the list of tables, immediately pick the 1-3 most relevant tables and call `sql_db_schema` to see their columns.
+- DO NOT hallucinate column names. Verify them first.
+
+Format:
+```json
+{{
+  "analysis": "A brief summary of what you found.",
+  "data": [
+    {{"column1": "val1", "column2": "val2"}},
+    ...
+  ]
+}}
+```
+
+- If no data is found, set "data" to [].
+- DO NOT make any DML statements (INSERT, UPDATE, DELETE).
+- NEVER output anything other than the JSON block.
+- Ensure column names in "data" are descriptive and clean.
+"""
+
 
         agent = create_react_agent(
             llm,
             sql_tools,
-            prompt=SQL_SYSTEM_PROMPT.format(dialect=db.dialect),
+            prompt=SQL_SYSTEM_PROMPT.format(dialect=db.dialect, tenant_name=tenant_name, tenant_code=tenant_code, tenant_id=tenant_id),
         )
 
         agent_response = agent.invoke({"messages": [HumanMessage(content=str(query))]})

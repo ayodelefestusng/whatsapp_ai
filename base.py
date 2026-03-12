@@ -279,7 +279,7 @@ class VisualizationInput(BaseModel):
     current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
 class SQLQueryInput(BaseModel):
     """Input schema for the sql_query_tool."""
-    query: Any = Field(description="The natural language question to be converted into a SQL query or the generated SQL query itself.")
+    query: str = Field(description="The user's natural language question (e.g., 'total sales per month'). NEVER generate SQL yourself; the tool handles that.")
     state: Optional[dict] = Field(None, description="Injected workflow state")
     current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
     

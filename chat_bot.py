@@ -1,5 +1,6 @@
 from ast import If
 from calendar import c
+from math import log
 import os
 import sys
 import json
@@ -36,7 +37,7 @@ from langchain.agents.structured_output import ToolStrategy
 from langchain.agents import create_agent
 # Local Imports
 from database import SessionLocal
-from ollama_service import OllamaService
+from ollama_service import OllamaService, OllamaCloudWrapper
 from base import State, Answer, Context, ResponseFormat
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
@@ -46,6 +47,8 @@ OLLAMA_USERNAME = "ai-user"
 OLLAMA_PASSWORD = "x2GS7jEF@#2T"
 OLLAMA_MODEL = "gpt-oss-safeguard:20b"
 GEMINI_INIT= os.getenv("GEMINI_INIT", "google_genai:gemini-flash-latest")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "https://ollama.com")
+OLLAMA_API_KEY = os.getenv("OLLAMA_API_KEY", "")
 
 # Constants / Fallbacks
 # OLLAMA_BASE_URL = os.getenv("OLLAMA_API_URL", "http://localhost:11434")
@@ -82,6 +85,11 @@ def get_llm_instance(llm_config=None):
         elif "ollama" in name:
             # Initialize OllamaService without local network parameters
             return OllamaService(model=model_name)
+            # return OllamaCloudWrapper(
+            #     model_name=model_name,
+            #     host=os.getenv("OLLAMA_HOST", "https://ollama.com"),
+            #     api_key=os.getenv("OLLAMA_API_KEY", "")
+            # )
             
     return ChatGoogleGenerativeAI(model="gemini-1.5-flash", api_key=os.getenv("GOOGLE_API_KEY"), temperature=0)
 
@@ -265,9 +273,10 @@ GLOBAL_FINAL_ANSWER_PROMPTv2 = """
 
         PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
         - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
+        - **IMPORTANT: NEVER generate SQL queries yourself.** Always pass the user's natural language question (e.g., "How many transactions occurred last month?") as the 'query' argument to 'sql_query_tool'. The tool itself will handle the SQL generation and data extraction.
         - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
         - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
-        - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
+        - If 'sql_query_tool' returns no data or an empty 'data' list, do not call 'generate_visualization_tool'; instead, inform the user why data might be missing.
 
         PROTOCOL 5: PROFILE UPDATES
         - Use 'update_customer_tool' or 'update_employee_profile_tool'.
@@ -288,7 +297,7 @@ GLOBAL_FINAL_ANSWER_PROMPTv2 = """
 
         Tool Guide:{tool_intent_map}
         - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
-        - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
+        - for sql related queries: Maximum of 3 follow up questions allowed. NEVER generate SQL yourself. Always use natural language for the query parameter. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
            
         ### Output Format:
     You MUST return ONLY a valid JSON object. Do not include any text outside the JSON block.
@@ -306,7 +315,7 @@ GLOBAL_FINAL_ANSWER_PROMPTv2 = """
 
 
 GLOBAL_FINAL_ANSWER_PROMPT = """
-  You are Damilola, the AI-powered virtual assistant for ATB. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
+  You are Victoria, the AI-powered virtual assistant for Gatik. Your role is to deliver professional customer service and insightful data analysis, depending on the user's needs.
 
     You operate in three modes:
     1. **Customer Support**: Respond with empathy, clarity, and professionalism. Your goal is to resolve issues, answer questions, and guide users to helpful resources — without technical jargon or internal system references.
@@ -341,9 +350,10 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
 
         PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
         - Use 'sql_query_tool' for data inquiries. Provide actionable insights.
+        - **IMPORTANT: NEVER generate SQL queries yourself.** Always pass the user's natural language question (e.g., "How many transactions occurred last month?") as the 'query' argument to 'sql_query_tool'. The tool itself will handle the SQL generation and data extraction.
         - For visualization requests (plot, chart, graph, visualize), ALWAYS chain: First call 'sql_query_tool' to fetch data, then call 'generate_visualization_tool' with the exact 'data' payload from 'sql_query_tool'.
         - IMPORTANT: When visualizing, you MUST call 'sql_query_tool' first to fetch the data. Once 'sql_query_tool' returns the JSON data, pass that exact 'data' payload into the `data` parameter of 'generate_visualization_tool'. Do not pass the data as a string, pass the raw data object.
-        - If 'sql_query_tool' returns no data, do not call 'generate_visualization_tool'.
+        - If 'sql_query_tool' returns no data or an empty 'data' list, do not call 'generate_visualization_tool'; instead, inform the user why data might be missing.
 
         PROTOCOL 5: PROFILE UPDATES
         - Use 'update_customer_tool' or 'update_employee_profile_tool'.
@@ -360,7 +370,7 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
 
         Tool Guide:{tool_intent_map}
         - **`generate_visualization_tool`**: **Use this tool when the user asks to 'plot', 'chart', 'graph', or 'visualize' data. You MUST supply the `data` parameter using the results from `sql_query_tool`.**
-        - for sql related queries: Maximum of 3 follow up questions allowed, after which you must provide an answer based on the data or respond that you are unsure if the data is inconclusive. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
+        - for sql related queries: Maximum of 3 follow up questions allowed. NEVER generate SQL yourself. Always use natural language for the query parameter. Do not call `generate_visualization_tool` if `sql_query_tool` returns no data or inconclusive results.
            
         ### Output Format:
     When you have the final information to reply to the user, you MUST return ONLY a valid JSON object in the 'answer' field. Do not include any text outside the JSON block.
@@ -368,12 +378,6 @@ GLOBAL_FINAL_ANSWER_PROMPT = """
     Ensure your final response is helpful, professional, and entirely in natural language. 
     NEVER output raw JSON, internal tool details, or tool call IDs in the final 'answer' field. 
     NEVER state that you are calling a tool; just call it using the native tool calling mechanism.
-    
-    ```json
-    {{
-    "answer": "A friendly, clear, and professional response in natural language",
-    }}
-    ```
     
     IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text. Tool calls are NOT considered 'text outside the JSON block'.
         """
@@ -946,7 +950,7 @@ def assistant_node(state: State, config: RunnableConfig):
     # agent_prompt = tenant_config.get("agent_prompt") or None
 
     # Fetch the prompt template
-    agent_prompt = tenant_config.get("agent_prompt",GLOBAL_FINAL_ANSWER_PROMPT)
+    agent_prompt = tenant_config.get("agent_prompt1",GLOBAL_FINAL_ANSWER_PROMPT)
 
 
 
@@ -1133,6 +1137,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             
             prompt_id = ta_item[0] if ta_item else None
             db_uri = ta_item[1] if ta_item and ta_item[1] else db_uri
+            log_info(f"Tenant AI config fetched. Prompt ID: {prompt_id}, DB URI: {db_uri}", tenant_id, conversation_id)
             
             # 2. Fetch Prompt
             if prompt_id:
@@ -1155,18 +1160,14 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
     fallback_prompt = "Default fallback prompt or error handling logic here."
     if agent_prompt:
         try:
-                
-            system_prompt = agent_prompt.format(
-                
-                current_year=current_year,
-                previous_year=previous_year,
-                current_date_str=current_date_str,
-                ID=employee_id,
-                tool_intent_map=p_res[2] if p_res else tool_guide,
-             
-            )
-        except KeyError as e:
-                logger.error(f"Missing key in prompt template: {e}")
+            system_prompt = agent_prompt
+            system_prompt = system_prompt.replace("{current_year}", str(current_year))
+            system_prompt = system_prompt.replace("{previous_year}", str(previous_year))
+            system_prompt = system_prompt.replace("{current_date_str}", str(current_date_str))
+            system_prompt = system_prompt.replace("{ID}", str(employee_id))
+            system_prompt = system_prompt.replace("{tool_intent_map}", str(p_res[2] if p_res else tool_guide))
+        except Exception as e:
+                logger.error(f"Error formatting prompt templateALUKETT: {e}")
                 system_prompt = fallback_prompt # Fallback to raw if format fails
     else:
         # Handle the case where no prompt is found
@@ -1308,6 +1309,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
                     
                 if final_state.get("visualization_analysis"):
                     result = result+"\n"+final_state['visualization_analysis']
+                # final_result = result.replace("ATB", "Gatik")
                 final_result = result.replace("ATB", "Gatik")
                 logger.info(f"LLM Response Extracted: {final_result}")
                 return final_result

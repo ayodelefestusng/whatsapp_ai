@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from logging.handlers import RotatingFileHandler
-from langchain.agents.structured_output import ToolStrategy
+from langchain.agents.structured_output import ToolStrategy,ProviderStrategy
 # LangChain / LangGraph
 from langchain_core.messages import (
     AIMessage, HumanMessage, SystemMessage, ToolMessage
@@ -41,7 +41,7 @@ from ollama_service import OllamaService, OllamaCloudWrapper
 from base import State, Answer, Context, ResponseFormat
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
-from tools import tools, init_sql_agent
+from tools import tools, init_sql_agent,trim_messages
 OLLAMA_BASE_URL = "https://ai.notchhr.io/api/chat/local"
 OLLAMA_USERNAME = "ai-user"
 OLLAMA_PASSWORD = "x2GS7jEF@#2T"
@@ -1066,23 +1066,19 @@ def assistant_node(state: State, config: RunnableConfig):
     #             "status_summary": status_summary
     #         }   
 
+
 def build_graph(tenant_id: str, conversation_id: str, checkpointer=None):
     workflow = StateGraph(State)
-    log_info("Building graph for tenant: {tenant_id}, conversation: {conversation_id}", tenant_id, conversation_id)
+    log_info(f"Building graph for tenant: {tenant_id}, conversation: {conversation_id}", tenant_id, conversation_id)
 
     # 1. Add Nodes
     workflow.add_node("assistant_node", assistant_node)
     workflow.add_node("tool_node", tool_node)
     
-    
-    # workflow.add_node("guardrail_node", routing_guardrail_node)
-    # log_info("Guardrail node added to graph.", tenant_id, conversation_id)
-
     # 2. Routing
     workflow.add_edge(START, "assistant_node")
     log_info("Edge added from START to assistant_node.", tenant_id, conversation_id)
 
-    # workflow.add_conditional_edges("llm_call", should_continue, ["tool_node", END])
     workflow.add_conditional_edges(
         "assistant_node", should_continue, ["tool_node", END]
     )
@@ -1094,17 +1090,28 @@ def build_graph(tenant_id: str, conversation_id: str, checkpointer=None):
     return workflow.compile(checkpointer=checkpointer)
 
 
+ResponseFormat1 = {
+    "type": "object",
+    "description": "Response schema for the agent.",
+    "properties": {
+        "answer": {"type": "string", "description": "The answer to the user's question"},
+        "leave_application": {"type": "string", "description": "The leave approval status to be injected by tools if applicable, otherwise null."},
+        "visualization_image": {"type": "string", "description": "Base64-encoded image string of the generated visualization, if applicable."},
+         "visualization_analysis": {"type": "string", "description": "explanation of the visualization results, if applicable."},
+    },
+    "required": ["answer", "leave_application", "visualization_image", "visualization_analysis"]
+}
+
 
 def process_message(message_content: str, conversation_id: str, tenant_id: str, employee_id: Optional[str] = None, push_name: str = "User"):
     # Fallback for employee_id
     if not employee_id:
         employee_id = DEFAULT_EMPLOYEE_ID
     log_info("Starting message processing pipeline", tenant_id, conversation_id)
-    log_info(f" alukett Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
+    log_info(f" Employee ID: {employee_id}-message Content: {message_content}", tenant_id, conversation_id)
     
     vector_store_result = initialize_vector_store(tenant_id)
 
-    # Unpack based on your initialize_vector_store return (vector_store, info_dict)
     tenant_vector_store, vs_info = (
         vector_store_result
         if isinstance(vector_store_result, tuple)
@@ -1127,7 +1134,6 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
     try:
         with SessionLocal() as session:
             log_info("Fetching tenant AI config", tenant_id, conversation_id)
-            # 1. Fetch Tenant AI config
             ta_sql = """
                 SELECT prompt_template_id, db_uri 
                 FROM customer_tenant_ai 
@@ -1139,14 +1145,13 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             db_uri = ta_item[1] if ta_item and ta_item[1] else db_uri
             log_info(f"Tenant AI config fetched. Prompt ID: {prompt_id}, DB URI: {db_uri}", tenant_id, conversation_id)
             
-            # 2. Fetch Prompt
             if prompt_id:
                 p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE id = :pid"
                 p_res = session.execute(text(p_sql), {"pid": prompt_id}).fetchone()
             else:
                 p_sql = "SELECT agent_prompt, \"global_answer_prompt\", \"tool_intent_map\" FROM customer_prompt WHERE name = 'standard' LIMIT 1"
                 p_res = session.execute(text(p_sql)).fetchone()
-            log_info("Fetched tenant AI config", tenant_id, conversation_id)    
+            log_info("Fetched prompt config", tenant_id, conversation_id)    
     except Exception as e:
         log_error(f"Database configuration fetch failed: {e}. Using defaults.", tenant_id, conversation_id)
     
@@ -1156,100 +1161,35 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
     else:
         log_warning("No prompt template found in DB. Using global default.", tenant_id, conversation_id)
         agent_prompt = GLOBAL_FINAL_ANSWER_PROMPT    
+    
     greeting_instruction = f"Always greet or address the user using their name: {push_name}, if they are starting a conversation or if appropriate."
     fallback_prompt = "Default fallback prompt or error handling logic here."
+    
+    current_year = datetime.now().year
+    previous_year = current_year - 1
+    current_date_str = datetime.now().strftime("%Y-%m-%d")
+
+    system_prompt = agent_prompt or fallback_prompt
     if agent_prompt:
         try:
-            system_prompt = agent_prompt
             system_prompt = system_prompt.replace("{current_year}", str(current_year))
             system_prompt = system_prompt.replace("{previous_year}", str(previous_year))
             system_prompt = system_prompt.replace("{current_date_str}", str(current_date_str))
             system_prompt = system_prompt.replace("{ID}", str(employee_id))
             system_prompt = system_prompt.replace("{tool_intent_map}", str(p_res[2] if p_res else tool_guide))
         except Exception as e:
-                logger.error(f"Error formatting prompt templateALUKETT: {e}")
-                system_prompt = fallback_prompt # Fallback to raw if format fails
-    else:
-        # Handle the case where no prompt is found
-        system_prompt = fallback_prompt
-
-
-    tenant_config_dict = {
-        "tenant_id": tenant_id,
-        "employee_id": employee_id,
-        "db_uri": db_uri,
-        "push_name": push_name,
-        "agent_prompt": agent_prompt,
-        "final_answer_prompt": p_res[1] if p_res else GLOBAL_FINAL_ANSWER_PROMPT,
-        "tool_intent_map": p_res[2] if p_res else tool_guide,
-    }
-    # --- Logging Connectivity confirmation ---
-    # 1. Database Connectivity Check
-    db_connected = False
-    record_found = False
-    try:
-        with SessionLocal() as check_session:
-            # Check for a simple record to confirm DB connectivity and data presence
-            res = check_session.execute(text("SELECT id, name, code FROM org_tenant WHERE code = :code LIMIT 1"), {"code": tenant_id}).fetchone()
-            log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
-            db_connected = True
-            if res:
-                record_found = True
-                log_info(f"✅ DB Connected. Tenant record found: ID={res[0]}, Name='{res[1]}', Code='{res[2]}'.", tenant_id, conversation_id)
-                # Fetch a sample record from another table to be double sure - e.g. Prompt or LeaveType
-                sample = check_session.execute(text("SELECT id, name FROM customer_prompt LIMIT 1")).fetchone()
-                if sample:
-                    log_info(f"📊 Sample Prompt Record: ID={sample[0]}, Name='{sample[1]}'", tenant_id, conversation_id)
-            else:
-                log_warning(f"⚠️ DB Connected, but NO tenant record found for '{tenant_id}'.", tenant_id, conversation_id)
-    except Exception as e:
-        log_error(f"❌ DB Connectivity check failed: {e}", tenant_id, conversation_id)
-
-    # 2. FAS URL Connectivity Check
-    # fas_url = os.getenv("_FAS_REMOTE_URL") or os.getenv("VECTOR_STORE_URL")
-# 1. Define the base path using the current script's location
-# This ensures it always looks in the correct 'faiss_dbs' folder regardless of where you run it from
+                logger.error(f"Error formatting prompt template: {e}")
+                system_prompt = agent_prompt
+    
     base_dir = os.path.dirname(os.path.abspath(__file__))
     persist_directory = os.path.join(base_dir, "faiss_dbs", tenant_id)
 
-    # 2. Check the directory using OS-native methods
-    try:
-        if os.path.isdir(persist_directory):
-            log_info(f"✅ FAS Directory confirmed at: {persist_directory}", tenant_id, conversation_id)
-            
-            # Check for the existence of the actual index files to be extra safe
-            index_file = os.path.join(persist_directory, "index.faiss")
-            if os.path.exists(index_file):
-                log_info(f"✅ Index file found: {index_file}", tenant_id, conversation_id)
-            else:
-                log_error(f"⚠️ FAS Directory exists but index.faiss is missing: {persist_directory}", tenant_id, conversation_id)
-        else:
-            log_error(f"❌ FAS Directory not found at: {persist_directory}", tenant_id, conversation_id)
-
-    except Exception as e:
-        log_error(f"❌ Unexpected error accessing directory {persist_directory}: {e}", tenant_id, conversation_id)
-        
-        
     log_info(f"Tenant config prepared. DB URI present: {bool(db_uri)}", tenant_id, conversation_id)
     
     with PostgresSaver.from_conn_string(db_uri) as checkpointer:
-    # with PostgresSaver.from_conn_string(os.getenv("DATABASE_URL")) as cp:
         checkpointer.setup()
-        # app = build_graph(tenant_id, conversation_id,checkpointer=checkpointer)
-        
-
-        # config = {"configurable": {"thread_id": conversation_id, "tenant_id": tenant_id, "employee_id": employee_id}}
         
         config = {"configurable": {"thread_id": conversation_id}}
-
-        # initial_state = {
-        #     "messages": [HumanMessage(content=message_content)],
-        #     "user_query": message_content,
-        #     "tenant_config": tenant_config_dict,
-        #     "vector_store_path": persist_directory
-        # }
-        
-
         systematic_prompt = f"{system_prompt}\n\n{greeting_instruction}{golden_rules}"
 
         context = Context(
@@ -1265,60 +1205,81 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         )
      
         agent = create_agent(
-    model=get_model(),
-    system_prompt=systematic_prompt,
-    tools=tools,
-    context_schema=Context,
-    response_format=ToolStrategy(ResponseFormat),
-    checkpointer=checkpointer
-)
-
-        # final_state = app.invoke(initial_state, config=config)
-        # final_state = agent.invoke({"messages": [HumanMessage(content=message_content)]}, config=config)
+            model=get_model(),
+            system_prompt=systematic_prompt,
+            tools=tools,
+            context_schema=Context,
+            response_format=ToolStrategy(ResponseFormat),
+            # response_format=ProviderStrategy(ResponseFormat1),
+            # response_format=ResponseFormat,
+            checkpointer=checkpointer,
+            middleware=[trim_messages],
+        )
+# type[StructuredResponseT]
         final_state = agent.invoke(
-    {"messages": [{"role": "user", "content": message_content}]},
-    config=config,
-    context=context
-)
-        logger.info(f" Raw LLM response  : {final_state}")
+            {"messages": [{"role": "user", "content": message_content}]},
+            config=config,
+            context=context
+        )
         
-        # Correctly access the final answer from the messages in the state
+        logger.info(f" Raw LLM response  : {final_state}")
+        logger.info(f"Final state keys: {list(final_state.keys()) if isinstance(final_state, dict) else 'Not a dict'}")
+
+        if isinstance(final_state, dict):
+            logger.info(f"Final state viz_image present: {bool(final_state.get('visualization_image'))}")
+            if final_state.get('visualization_image'):
+                logger.info(f"Final state viz_image length: {len(final_state.get('visualization_image'))}")
+        
         messages = final_state.get("messages", [])
-        # Use extract_final_answer for a more robust extraction
-        current_answer = extract_final_answer(messages[-1]) if messages else ""
+        logger.info(f" LLM response messages Raweeee : {messages}")
+        last_msg = messages[-1] if messages else None
+        extracted_data = {}
+        
+        if last_msg:
+            import json
+            import re
+            content_raw = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
+            content_clean = re.sub(r"^```json\s*|\s*```$", "", content_raw.strip(), flags=re.MULTILINE)
+            try:
+                extracted_data = json.loads(content_clean)
+            except json.JSONDecodeError:
+                extracted_data = {"answer": content_raw}
+
+        if not isinstance(extracted_data, dict):
+            extracted_data = {"answer": str(extracted_data)}
+
+        current_answer = extracted_data.get("answer") or extracted_data.get("text") or ""
             
         try:
-            logger.info(f"LLM response Process message : {current_answer}")
+            logger.info(f"LLM response Process message extraction: {current_answer[:200]}...")
             
-            if current_answer:
-                # 🛡️ CRITICAL: If the extracted answer still looks like a tool call, suppress it
-                if '"tool":' in str(current_answer) or '"name":' in str(current_answer):
-                     logger.warning(f"Detected residual tool call in extracted answer: {current_answer}")
-                     extracted_text = "I am processing your request. Please hold on."
-                else:
-                     extracted_text = str(current_answer)
-
-                # 2. Build the result dictionary
-                result = extracted_text
-                
-                # Add visualization fields if present in final_state
-                if final_state.get("visualization_image"):
-                    logger.info(f"Visualization Image: {final_state['visualization_image']}")
-                    viz= f"thus the chart is {final_state['visualization_image']}"
-                    result = result+"\n"+viz
-                    
-                if final_state.get("visualization_analysis"):
-                    result = result+"\n"+final_state['visualization_analysis']
-                # final_result = result.replace("ATB", "Gatik")
-                final_result = result.replace("ATB", "Gatik")
-                logger.info(f"LLM Response Extracted: {final_result}")
-                return final_result
-
+            if '"tool":' in str(current_answer) or '"name":' in str(current_answer):
+                 logger.warning(f"Detected residual tool call in extracted answer: {current_answer}")
+                 extracted_text = "I am processing your request. Please hold on."
             else:
-                fallback = "I apologize, but I encountered an internal error processing your request."
-                logger.info(f"LLM Response Fallback: {fallback}")
-                return fallback
+                 extracted_text = str(current_answer)
+
+            result_data = {
+                "text": extracted_text,
+                "viz_image": extracted_data.get("visualization_image") or final_state.get("visualization_image"),
+                "viz_analysis": extracted_data.get("visualization_analysis") or final_state.get("visualization_analysis")
+            }
+            
+            if result_data["viz_analysis"] and result_data["viz_analysis"] not in result_data["text"]:
+                result_data["text"] += "\n\n" + result_data["viz_analysis"]
+                
+            result_data["text"] = result_data["text"].replace("ATB", "Gatik")
+            
+            logger.info(f"Processed response dictionary keys: {list(result_data.keys())}")
+            logger.info(f"Processed response viz_image value present: {bool(result_data.get('viz_image'))}")
+            
+            if result_data["viz_image"]:
+                 logger.info(f"Visualization image found in response. Length: {len(result_data['viz_image'])}")
+            else:
+                 logger.warning("No visualization image found in process_message final result.")
+
+            return result_data
 
         except Exception as e:
             logger.error(f"Error extracting final response: {str(e)}", exc_info=True)
-            return "An unexpected error occurred while formatting the response."
+            return {"text": "An unexpected error occurred while formatting the response.", "viz_image": None}

@@ -254,58 +254,105 @@ async def load_pdf(request: LoadPDFRequest):
 async def whatsapp_webhook(request: Request):
     log_info("Received webhook request", "unknown", "unknown")
     try:
-        content_type = request.headers.get("content-type", "")
-        if "application/json" in content_type:
-            payload = await request.json()
-            message_text = ""
-            phone_number = "unknown"
-            push_name = "User"
+        # content_type = request.headers.get("content-type", "")
+        # if "application/json" in content_type:
+        #     payload = await request.json()
+        #     message_text = ""
+        #     phone_number = "unknown"
+        #     push_name = "User"
             
-            if "data" in payload and isinstance(payload["data"], dict):
-                data = payload["data"]
-                phone_number = data.get("key", {}).get("remoteJid", "").split("@")[0]
-                push_name = data.get("pushName") or "User"
-                message_text = data.get("message", {}).get("conversation", "") or \
-                               data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
+        #     # Evolution API specific data structure
+        #     if "data" in payload and isinstance(payload["data"], dict):
+        #         data = payload["data"]
+        #         phone_number = data.get("key", {}).get("remoteJid", "").split("@")[0]
+        #         push_name = data.get("pushName") or "User"
+        #         message_text = data.get("message", {}).get("conversation", "") or \
+        #                        data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
             
-            if not message_text:
-                message_text = payload.get("message", {}).get("text") or payload.get("text", "")
-            if phone_number == "unknown":
-                phone_number = payload.get("sender") or payload.get("from") or "anonymous"
-            if push_name == "User":
-                push_name = payload.get("pushName") or "User"
+        #     # Fallback for other JSON formats
+        #     if not message_text:
+        #         message_text = payload.get("message", {}).get("text") or payload.get("text", "")
+        #     if phone_number == "unknown":
+        #         phone_number = payload.get("sender") or payload.get("from") or "anonymous"
+        #     if push_name == "User":
+        #         push_name = payload.get("pushName") or "User"
             
-            tenant_id = payload.get("tenant_id", "DMC")
-            employee_id = payload.get("employee_id", DEFAULT_EMPLOYEE_ID)
+        #     tenant_id = payload.get("tenant_id", "DMC")
+        #     employee_id = payload.get("employee_id", DEFAULT_EMPLOYEE_ID)
             
-        else:
-            form_data = await request.form()
-            message_text = form_data.get("message", "")
-            phone_number = form_data.get("phone_number") or form_data.get("sender") or "anonymous"
-            push_name = form_data.get("pushName") or "User"
-            tenant_id = form_data.get("tenant_id", "DMC")
-            employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
-        # message_text="Hello Can I get a loan"
-        if not message_text:
-            return {"status": "ignored", "reason": "empty message"}
-        
-       
+        # else:
+        #     # Form data handling
+        #     form_data = await request.form()
+        #     message_text = form_data.get("message", "")
+        #     phone_number = form_data.get("phone_number") or form_data.get("sender") or "anonymous"
+        #     push_name = form_data.get("pushName") or "User"
+        #     tenant_id = form_data.get("tenant_id", "DMC")
+        #     employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
+
+        # if not message_text:
+        #     return {"status": "ignored", "reason": "empty message"}
+        message_text='I need chart of monhtly transaction count from inception till date check customer_transaction schema e'
+        employee_id = DEFAULT_EMPLOYEE_ID
+        phone_number = "2348021299221"
+        conversation_id = "phone_numbdddeDdssdDDssDr"
+        tenant_id = "DMC"
+        push_name = "User"
         log_info(f"Processing message from {phone_number}: {message_text}", tenant_id, phone_number)
+        
         response = process_message(
             message_content=message_text,
-            conversation_id=phone_number,
+            conversation_id=conversation_id,
             tenant_id=tenant_id,
             employee_id=employee_id,
             push_name=push_name
         )
-        log_info(f"Sent response to {phone_number}. API response: {response}", tenant_id, phone_number)
-
-        message_res = send_whatsapp_message(phone_number, response.get("answer", ""))
-        log_info(f"Treated Sent response to {phone_number}. API response: {message_res}", tenant_id, phone_number)
+        
+        log_info(f"Chatbot response keys: {list(response.keys()) if isinstance(response, dict) else 'Not a dict'}", tenant_id, phone_number)
+        if isinstance(response, dict):
+            viz_image = response.get("viz_image")
+            log_info(f"Response viz_image present: {bool(viz_image)}", tenant_id, phone_number)
+            if viz_image:
+                log_info(f"Entering image sending block. Image length: {len(viz_image)}", tenant_id, phone_number)
+                # Send image first
+                media_res = send_media_message(
+                    phone_number, 
+                    viz_image, 
+                    caption="Here is the chart you requested."
+                )
+                log_info(f"Media API response status: {media_res.status_code}", tenant_id, phone_number)
+                
+                # Send analysis text separately
+                text_to_send = response.get("text", "Analysis complete.")
+                return send_whatsapp_message(phone_number, text_to_send)
+            else:
+                log_info("No visualization image found in dict response.", tenant_id, phone_number)
+        else:
+            log_info(f"Response is not a dict, it is a {type(response)}. Skipping image logic.", tenant_id, phone_number)
+        
+        # Fallback for text-only responses
+        text_content = response.get("text", str(response)) if isinstance(response, dict) else str(response)
+        message_res = send_whatsapp_message(phone_number, text_content)
+        log_info(f"Text message API response: {message_res}", tenant_id, phone_number)
         return message_res
+
     except Exception as e:
-        log_error(f"Error in whatsapp_webhook: {e}", "unknown", "unknown")
+        log_error(f"Error in webhook: {e}", "unknown", "unknown")
         raise HTTPException(status_code=500, detail=str(e))
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# if __name__ == "__main__":
+#     uvicorn.run(app, host=" (")
+
+
+def send_media_message(number: str, base64_image: str, caption: str):
+    url = f"{EVOLUTION_API_URL}/message/sendMedia/{EVOLUTION_INSTANCE}"
+    headers = {"apikey": EVOLUTION_API_KEY, "Content-Type": "application/json"}
+    
+    payload = {
+        "number": f"{number.replace('+', '').strip()}",  # Some versions don't want @s.whatsapp.net here if it's appended by the API
+        "mediatype": "image",
+        "mimetype": "image/png",
+        "media": base64_image,
+        "caption": caption
+    }
+    log_info(f"Sending media message to {number}. Payload keys: {payload.keys()}", "system", "system")
+    return requests.post(url, json=payload, headers=headers)

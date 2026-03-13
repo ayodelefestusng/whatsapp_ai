@@ -277,6 +277,12 @@ class VisualizationInput(BaseModel):
     data: Optional[Any] = Field(None, description="The raw data payload from sql_query_tool to visualize. MUST be provided if available.")
     state: Optional[dict] = Field(None, description="Injected workflow state")
     current_tool_id: Optional[str] = Field(None, description="Injected tool call ID")
+class VisualizationAnalysis(BaseModel):
+    """Structured analysis for a visualization."""
+    summary: str = Field(description="A brief summary of the main trend or insight.")
+    key_points: List[str] = Field(description="List of specific observations from the data.")
+    recommendation: Optional[str] = Field(None, description="An actionable recommendation based on the data.")
+
 class SQLQueryInput(BaseModel):
     """Input schema for the sql_query_tool."""
     query: str = Field(description="The user's natural language question (e.g., 'total sales per month'). NEVER generate SQL yourself; the tool handles that.")

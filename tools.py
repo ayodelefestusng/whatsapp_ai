@@ -1172,6 +1172,12 @@ CRITICAL INSTRUCTIONS TO PREVENT LOOPS:
 - DO NOT call `sql_db_list_tables` more than once!
 - After receiving the list of tables, immediately pick the 1-3 most relevant tables and call `sql_db_schema` to see their columns.
 - DO NOT hallucinate column names. Verify them first.
+           - **CRITICAL SCHEMAS TO REFERENCE**: 
+                - customer_account, customer_branchperformance, customer_contact, customer_conversation, 
+                - customer_crmuser, customer_customer, customer_lead, customer_loanreport, 
+                - customer_message, customer_opportunity, customer_transaction, org_location,
+                - ats_jobposting, ats_application, org_jobrole, employees_employee, 
+                - leave_leavetype, leave_leavebalance.
 
 Format:
 ```json
@@ -1331,9 +1337,26 @@ def web_search_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
 #     args_schema=SQLQueryInput,
 # )
 
+# --- HELPER FUNCTIONS ---
+def get_column_types(df: pd.DataFrame):
+    """Helper function to identify column types for plotting."""
+    # Attempt to convert object columns to datetime to identify "hidden" date columns
+    for col in df.select_dtypes(include=['object']).columns:
+        try:
+            # Try parsing with a set threshold to avoid false positives on random strings
+            # If it parses, convert the column permanently for plotting benefits
+            df[col] = pd.to_datetime(df[col], errors='raise')
+        except (ValueError, TypeError):
+            pass
+
+    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+    categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+    date_cols = df.select_dtypes(include=['datetime', 'datetimetz']).columns.tolist()
+    return numeric_cols, categorical_cols, date_cols
+
 
 @tool("generate_visualization_tool", args_schema=VisualizationInput)
-def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
+def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
     """
     Generates a data visualization based on a natural language query.
     """
@@ -1416,9 +1439,22 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
         chart_type = llm.invoke(chart_selection_prompt).content.strip().lower()
         log_info(f"LLM chose chart type: '{chart_type}'", tenant_id, conversation_id)
 
-        # Step 4: Get textual analysis from the LLM
+        # Step 4: Get structured textual analysis from the LLM
+        from base import VisualizationAnalysis
         analysis_prompt = f"Analyze this data and provide a brief, insightful summary based on the user's original request: '{query}'.\n\nData:\n{df.to_csv(index=False)}"        
-        analysis_text = llm.invoke(analysis_prompt).content
+        
+        try:
+            structured_llm = llm.with_structured_output(VisualizationAnalysis)
+            analysis_obj = structured_llm.invoke(analysis_prompt)
+            
+            # Format analysis_text for downstream use
+            analysis_text = f"**Summary**: {analysis_obj.summary}\n\n**Key Points**:\n- " + "\n- ".join(analysis_obj.key_points)
+            if analysis_obj.recommendation:
+                analysis_text += f"\n\n**Recommendation**: {analysis_obj.recommendation}"
+        except Exception as e:
+            log_warning(f"Structured analysis failed: {e}. Falling back to standard output.", tenant_id, conversation_id)
+            analysis_text = llm.invoke(analysis_prompt).content
+            
         log_info(f"Generated Analysis: {analysis_text[:200]}...", tenant_id, conversation_id) # Log a snippet
 
         # Step 5: Generate the plot using intelligent chart selection
@@ -1426,23 +1462,28 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
         fig, ax = plt.subplots(figsize=(10, 6))
         numeric, categorical, dates = get_column_types(df)
         
-        if chart_type == 'bar' and categorical and numeric:
-            x_col = categorical[0]
-            if len(numeric) > 1: # Handle multi-series bar charts
-                df.set_index(x_col)[numeric].plot(kind='bar', ax=ax, figsize=(12, 7))
+        if chart_type == 'bar' and (categorical or dates) and numeric:
+            x_col = dates[0] if dates else categorical[0]
+            y_cols = [c for c in numeric if c != x_col]
+            if not y_cols: y_cols = [numeric[0]] # Fallback
+            
+            if len(y_cols) > 1: # Handle multi-series bar charts
+                df.set_index(x_col)[y_cols].plot(kind='bar', ax=ax, figsize=(12, 7))
                 ax.set_ylabel("Values")
                 ax.legend(title='Metrics')
             else: # Handle single-series bar charts
-                y_col = numeric[0]
+                y_col = y_cols[0]
                 df.plot(kind='bar', x=x_col, y=y_col, ax=ax, legend=False)
                 ax.set_ylabel(y_col.replace('_', ' ').title())
             ax.set_xlabel(x_col.replace('_', ' ').title())
             plt.xticks(rotation=45, ha='right')
 
-        elif chart_type == 'line' and (dates or numeric):
-            x_col = dates[0] if dates else numeric[0]
+        elif chart_type == 'line' and (dates or categorical or numeric):
+            # Prioritize Date -> Categorical -> First Numeric for X axis
+            x_col = dates[0] if dates else (categorical[0] if categorical else numeric[0])
             y_cols = [c for c in numeric if c != x_col]
-            if not y_cols: y_cols = numeric # Fallback if x is also the only numeric
+            if not y_cols: y_cols = [numeric[0]] # Fallback if everything is numeric and x picked the first one
+            
             df.plot(kind='line', x=x_col, y=y_cols, ax=ax, marker='o')
             ax.set_xlabel(x_col.replace('_', ' ').title())
             ax.set_ylabel("Value")
@@ -1483,8 +1524,7 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
         return {"visualization_result": {"analysis": analysis_text_on_error, "image_base64": None}}
      
     # return {"visualization_result": {"analysis": analysis_text, "image_base64": image_base64}}   
-    log_info(f"Successfully generated plot image. Base64 size: {len(image_base64)} bytes.", tenant_id, conversation_id)
-    return f"Visualization generated successfully. Analysis: {analysis_text}"
+    return {"visualization_result": {"analysis": analysis_text, "image_base64": image_base64}}
     # return Command(
     #     update={
     #         "visualization_image": image_base64,
@@ -1508,14 +1548,32 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> str:
 
 
 
-def get_column_types(df: pd.DataFrame):
-    """Helper function to identify column types for plotting."""
-    # Note: get_column_types is a helper and doesn't have easy access to tenant_id/conversation_id 
-    # without passing them through. We'll leave this one as a simple debug or remove it.
-    numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-    categorical_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
-    date_cols = df.select_dtypes(include=['datetime', 'datetimetz']).columns.tolist()
-    return numeric_cols, categorical_cols, date_cols
+# --- END OF VISUALIZATION TOOLS ---
+from langchain.agents.middleware import before_model
+from langchain.agents import create_agent, AgentState
+from langgraph.runtime import Runtime
+from langchain.messages import RemoveMessage
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from typing import Any
+@before_model
+def trim_messages(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
+    """Keep only the last few messages to fit context window."""
+    messages = state["messages"]
+
+    if len(messages) <= 3:
+        return None  # No changes needed
+
+    first_msg = messages[0]
+    recent_messages = messages[-3:] if len(messages) % 2 == 0 else messages[-4:]
+    new_messages = [first_msg] + recent_messages
+
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            *new_messages
+        ]
+    }
+
 
 tools = [
     get_payslip_tool,

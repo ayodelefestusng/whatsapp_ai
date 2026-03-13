@@ -8,8 +8,24 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, logger
 from pydantic import BaseModel
 from typing import Optional
+# import imghdr
+import base64
+import requests
 
+import redis
+import requests
+# ...existing code...
+import base64
+import requests
+import os
 from chat_bot import log_info, log_error, process_message, ingest_pdf_for_tenant
+import base64
+import requests
+import os
+import time
+
+
+
 
 app = FastAPI(title="Chatbot API", description="FastAPI Refactor with WhatsApp Integration")
 
@@ -116,8 +132,6 @@ def log_debug(msg, tenant_id, conversation_id):
     logger.debug(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
 
 
-import redis
-import requests
 # --- Redis Setup ---
 REDIS_URL = os.getenv("REDIS_URL", "redis://default:65f11924ebc7c9e25051@whatsapp-1_evolution-api-redis:6379")
 redis_client = redis.Redis.from_url(REDIS_URL)
@@ -143,12 +157,69 @@ def send_whatsapp_message_wrond__deployed(number: str, text: str):
 
 
 
-def send_whatsapp_message1(number: str, text: str):
-    url = f"{EVOLUTION_API_URL}/message/send"
-    headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}
-    payload = {"number": number, "text": text}
-    response = requests.post(url, json=payload, headers=headers)
-    return response.json()
+def send_media_message(number: str, base64_image: str, caption: str):
+    log_info(f"Preparing to send media message to {number}. Image length: {len(base64_image)}", "system", "system")
+    # Strip any data URI prefix
+    if base64_image.startswith("data:"):
+        base64_image = base64_image.split(",", 1)[1]
+
+    base64_image = base64_image.strip()
+
+    try:
+        img_bytes = base64.b64decode(base64_image, validate=True)
+    except Exception as e:
+        log_error(f"Invalid base64 image data: {e}", "system", "system")
+        return None
+
+    # Detect Mimetype/Extension
+    if img_bytes.startswith(b'\x89PNG'):
+        mimetype, ext = "image/png", ".png"
+    elif img_bytes.startswith(b'\xff\xd8'):
+        mimetype, ext = "image/jpeg", ".jpg"
+    else:
+        mimetype, ext = "image/png", ".png"
+
+    # --- LOCAL FALLBACK: Save to /temp ---
+    # try:
+    #     temp_dir = os.path.join(os.getcwd(), "temp_viz")
+    #     os.makedirs(temp_dir, exist_ok=True)
+    #     filename = f"viz_{int(time.time())}_{number.replace('@', '_')}{ext}"
+    #     filepath = os.path.join(temp_dir, filename)
+        
+    #     with open(filepath, "wb") as f:
+    #         f.write(img_bytes)
+    #     log_info(f"Image saved locally to: {filepath}", "system", "system")
+    # except Exception as e:
+    #     log_error(f"Failed to save local image copy: {e}", "system", "system")
+
+    # --- API DISPATCH ---
+    payload = {
+        "number": number.replace("+", "").strip() if "@" not in number else number,
+        "mediatype": "image",
+        "mimetype": mimetype,
+        "media": base64_image, 
+        "caption": caption,
+    }
+
+    url = os.getenv(
+        "WHATSAPP_MEDIA_URL",
+        "https://whatsapp-1-evolution-api.xqqhik.easypanel.host/message/sendMedia/session1"
+    )
+
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": os.getenv("EVOLUTION_API_KEY") 
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
+        log_info(f"Media API response status: {resp.status_code}", "system", "system")
+        return resp
+    except Exception as e:
+        log_error(f"API delivery failed: {e}", "system", "system")
+        return None
+
+
 def send_whatsapp_message(number: str, text: str):
     # Update this to include your instance name (e.g., session1)
     # The endpoint should be /message/sendText/{{instance_name}}
@@ -254,54 +325,54 @@ async def load_pdf(request: LoadPDFRequest):
 async def whatsapp_webhook(request: Request):
     log_info("Received webhook request", "unknown", "unknown")
     try:
-        # content_type = request.headers.get("content-type", "")
-        # if "application/json" in content_type:
-        #     payload = await request.json()
-        #     message_text = ""
-        #     phone_number = "unknown"
-        #     push_name = "User"
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            payload = await request.json()
+            message_text = ""
+            phone_number = "unknown"
+            push_name = "User"
             
-        #     # Evolution API specific data structure
-        #     if "data" in payload and isinstance(payload["data"], dict):
-        #         data = payload["data"]
-        #         phone_number = data.get("key", {}).get("remoteJid", "").split("@")[0]
-        #         push_name = data.get("pushName") or "User"
-        #         message_text = data.get("message", {}).get("conversation", "") or \
-        #                        data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
+            # Evolution API specific data structure
+            if "data" in payload and isinstance(payload["data"], dict):
+                data = payload["data"]
+                phone_number = data.get("key", {}).get("remoteJid", "").split("@")[0]
+                push_name = data.get("pushName") or "User"
+                message_text = data.get("message", {}).get("conversation", "") or \
+                               data.get("message", {}).get("extendedTextMessage", {}).get("text", "")
             
-        #     # Fallback for other JSON formats
-        #     if not message_text:
-        #         message_text = payload.get("message", {}).get("text") or payload.get("text", "")
-        #     if phone_number == "unknown":
-        #         phone_number = payload.get("sender") or payload.get("from") or "anonymous"
-        #     if push_name == "User":
-        #         push_name = payload.get("pushName") or "User"
+            # Fallback for other JSON formats
+            if not message_text:
+                message_text = payload.get("message", {}).get("text") or payload.get("text", "")
+            if phone_number == "unknown":
+                phone_number = payload.get("sender") or payload.get("from") or "anonymous"
+            if push_name == "User":
+                push_name = payload.get("pushName") or "User"
             
-        #     tenant_id = payload.get("tenant_id", "DMC")
-        #     employee_id = payload.get("employee_id", DEFAULT_EMPLOYEE_ID)
+            tenant_id = payload.get("tenant_id", "DMC")
+            employee_id = payload.get("employee_id", DEFAULT_EMPLOYEE_ID)
             
-        # else:
-        #     # Form data handling
-        #     form_data = await request.form()
-        #     message_text = form_data.get("message", "")
-        #     phone_number = form_data.get("phone_number") or form_data.get("sender") or "anonymous"
-        #     push_name = form_data.get("pushName") or "User"
-        #     tenant_id = form_data.get("tenant_id", "DMC")
-        #     employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
+        else:
+            # Form data handling
+            form_data = await request.form()
+            message_text = form_data.get("message", "")
+            phone_number = form_data.get("phone_number") or form_data.get("sender") or "anonymous"
+            push_name = form_data.get("pushName") or "User"
+            tenant_id = form_data.get("tenant_id", "DMC")
+            employee_id = form_data.get("employee_id", DEFAULT_EMPLOYEE_ID)
 
-        # if not message_text:
-        #     return {"status": "ignored", "reason": "empty message"}
-        message_text='I need chart of monhtly transaction count from inception till date check customer_transaction schema e'
-        employee_id = DEFAULT_EMPLOYEE_ID
-        phone_number = "2348021299221"
-        conversation_id = "phone_numbdeeeddeDdssdDDssDr"
-        tenant_id = "DMC"
-        push_name = "User"
+        if not message_text:
+            return {"status": "ignored", "reason": "empty message"}
+        # message_text='I need chart of monhtly transaction count from inception till date check customer_transaction schema e'
+        # employee_id = DEFAULT_EMPLOYEE_ID
+        # phone_number = "2348021299221"
+        # conversation_id = "phone_numbdeeeddeDdssdDDssDr"
+        # tenant_id = "DMC"
+        # push_name = "User"
         log_info(f"Processing message from {phone_number}: {message_text}", tenant_id, phone_number)
         
         response = process_message(
             message_content=message_text,
-            conversation_id=conversation_id,
+            conversation_id=phone_number,
             tenant_id=tenant_id,
             employee_id=employee_id,
             push_name=push_name
@@ -342,14 +413,15 @@ async def whatsapp_webhook(request: Request):
 # if __name__ == "__main__":
 #     uvicorn.run(app, host=" (")
 
-# import imghdr
-import base64
-import requests
 
-# ...existing code...
-import base64
-import requests
-import os
+def send_whatsapp_message1(number: str, text: str):
+    url = f"{EVOLUTION_API_URL}/message/send"
+    headers = {"Authorization": f"Bearer {EVOLUTION_API_KEY}"}
+    payload = {"number": number, "text": text}
+    response = requests.post(url, json=payload, headers=headers)
+    return response.json()
+
+
 
 def send_media_messagevgemini(number: str, base64_image: str, caption: str):
     # Strip any data URI prefix if present
@@ -401,72 +473,6 @@ def send_media_messagevgemini(number: str, base64_image: str, caption: str):
     except Exception as e:
         log_error(f"Failed to send media request: {e}", "system", "system")
         return None
-import base64
-import requests
-import os
-import time
-
-def send_media_message(number: str, base64_image: str, caption: str):
-    log_info(f"Preparing to send media message to {number}. Image length: {len(base64_image)}", "system", "system")
-    # Strip any data URI prefix
-    if base64_image.startswith("data:"):
-        base64_image = base64_image.split(",", 1)[1]
-
-    base64_image = base64_image.strip()
-
-    try:
-        img_bytes = base64.b64decode(base64_image, validate=True)
-    except Exception as e:
-        log_error(f"Invalid base64 image data: {e}", "system", "system")
-        return None
-
-    # Detect Mimetype/Extension
-    if img_bytes.startswith(b'\x89PNG'):
-        mimetype, ext = "image/png", ".png"
-    elif img_bytes.startswith(b'\xff\xd8'):
-        mimetype, ext = "image/jpeg", ".jpg"
-    else:
-        mimetype, ext = "image/png", ".png"
-
-    # --- LOCAL FALLBACK: Save to /temp ---
-    try:
-        temp_dir = os.path.join(os.getcwd(), "temp_viz")
-        os.makedirs(temp_dir, exist_ok=True)
-        filename = f"viz_{int(time.time())}_{number.replace('@', '_')}{ext}"
-        filepath = os.path.join(temp_dir, filename)
-        
-        with open(filepath, "wb") as f:
-            f.write(img_bytes)
-        log_info(f"Image saved locally to: {filepath}", "system", "system")
-    except Exception as e:
-        log_error(f"Failed to save local image copy: {e}", "system", "system")
-
-    # --- API DISPATCH ---
-    payload = {
-        "number": number.replace("+", "").strip() if "@" not in number else number,
-        "mediatype": "image",
-        "mimetype": mimetype,
-        "media": base64_image, 
-        "caption": caption,
-    }
-
-    url = os.getenv(
-        "WHATSAPP_MEDIA_URL",
-        "https://whatsapp-1-evolution-api.xqqhik.easypanel.host/message/sendMedia/session1"
-    )
-
-    headers = {
-        "Content-Type": "application/json",
-        "apikey": os.getenv("EVOLUTION_API_KEY") 
-    }
-
-    try:
-        resp = requests.post(url, json=payload, headers=headers, timeout=30)
-        log_info(f"Media API response status: {resp.status_code}", "system", "system")
-        return resp
-    except Exception as e:
-        log_error(f"API delivery failed: {e}", "system", "system")
-        return None
 
 
 def send_media_messagev2(number: str, base64_image: str, caption: str):
@@ -501,7 +507,6 @@ def send_media_messagev2(number: str, base64_image: str, caption: str):
     resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
     log_info(f"Media API response status: {resp.status_code} body: {resp.text}", "system", "system")
     return resp
-
 
 
 def send_media_messagev1(number: str, base64_image: str, caption: str):

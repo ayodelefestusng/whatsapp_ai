@@ -16,7 +16,8 @@ COPY requirements.txt .
 
 # Install dependencies into a virtualenv
 # This replaces your "pip install" command
-RUN uv pip install --no-cache -r requirements.txt
+# RUN uv pip install --no-cache -r requirements.txt
+RUN uv pip install --system --no-cache -r requirements.txt
 
 # Stage 2: Runtime
 FROM python:3.11-slim

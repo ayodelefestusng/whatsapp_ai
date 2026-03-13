@@ -43,7 +43,12 @@ from langgraph.types import Command
 from langchain.tools import tool
 from langchain.agents.structured_output import ToolStrategy
 
-
+from langchain.agents.middleware import before_model
+from langchain.agents import create_agent, AgentState
+from langgraph.runtime import Runtime
+from langchain.messages import RemoveMessage
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
+from typing import Any
 # from myproject_revisit.org.management.commands import state
 import json 
 from ollama_service import OllamaService
@@ -1549,28 +1554,46 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> dict
 
 
 # --- END OF VISUALIZATION TOOLS ---
-from langchain.agents.middleware import before_model
-from langchain.agents import create_agent, AgentState
-from langgraph.runtime import Runtime
-from langchain.messages import RemoveMessage
-from langgraph.graph.message import REMOVE_ALL_MESSAGES
-from typing import Any
+
 @before_model
 def trim_messages(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
-    """Keep only the last few messages to fit context window."""
+    """Keep only the last few messages to fit context window and trim base64 content."""
     messages = state["messages"]
+    
+    # 1. Trim base64 content from all messages to save memory/context
+    import re
+    base64_pattern = r"data:image\/.*?;base64,[a-zA-Z0-9+/=]{100,}"
+    
+    modified = False
+    processed_messages = []
+    for msg in messages:
+        if hasattr(msg, "content") and isinstance(msg.content, str) and re.search(base64_pattern, msg.content):
+            new_content = re.sub(base64_pattern, "[IMAGE_DATA_TRIMMED]", msg.content)
+            # Reconstruct message to keep metadata but update content
+            msg_type = type(msg)
+            kwargs = {}
+            for attr in ["tool_calls", "tool_call_id", "name", "id", "additional_kwargs"]:
+                if hasattr(msg, attr):
+                    kwargs[attr] = getattr(msg, attr)
+            processed_messages.append(msg_type(content=new_content, **kwargs))
+            modified = True
+        else:
+            processed_messages.append(msg)
 
-    if len(messages) <= 3:
+    # 2. Trim message count if needed
+    if len(processed_messages) <= 3:
+        if modified:
+            return {"messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES)] + processed_messages}
         return None  # No changes needed
 
-    first_msg = messages[0]
-    recent_messages = messages[-3:] if len(messages) % 2 == 0 else messages[-4:]
-    new_messages = [first_msg] + recent_messages
+    first_msg = processed_messages[0]
+    recent_messages = processed_messages[-3:] if len(processed_messages) % 2 == 0 else processed_messages[-4:]
+    final_messages = [first_msg] + recent_messages
 
     return {
         "messages": [
             RemoveMessage(id=REMOVE_ALL_MESSAGES),
-            *new_messages
+            *final_messages
         ]
     }
 

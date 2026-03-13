@@ -388,7 +388,8 @@ golden_rules = (
                 "1. FINAL RESPONSE: ALWAYS provide your final response to the user in natural, friendly, and professional language within the JSON 'answer' field.\n"
                 "2. NO SYSTEM LEAKAGE: NEVER output raw JSON, tool call IDs, or internal structural artifacts to the user's view.\n"
                 "3. NATIVE TOOL CALLING: Adhere to protocols by calling tools natively. Do not simulate a tool call by writing JSON text. Only provide the JSON 'answer' block once you have the results you need.\n"
-                "4. If you need a tool, execute the tool call immediately. Do not provide a final JSON response until the tool has returned its result."
+                "4. If you need a tool, execute the tool call immediately. Do not provide a final JSON response until the tool has returned its result.\n"
+                "5. NO BASE64 IN TEXT: NEVER include base64-encoded image data or 'data:image/...' strings in the 'answer' field. These are handled separately by the visualization system."
             )
 
 current_year = datetime.now().year
@@ -1285,6 +1286,11 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             if result_data["viz_analysis"] and result_data["viz_analysis"] not in result_data["text"]:
                 result_data["text"] += "\n\n" + result_data["viz_analysis"]
                 
+            # Filter out base64 image data from text response
+            import re
+            base64_pattern = r"!\[.*?\]\(data:image\/.*?;base64,.*?\)|data:image\/.*?;base64,[a-zA-Z0-9+/=]+"
+            result_data["text"] = re.sub(base64_pattern, "[Image Visualization]", result_data["text"])
+
             result_data["text"] = result_data["text"].replace("ATB", "Gatik")
             
             logger.info(f"Processed response dictionary keys: {list(result_data.keys())}")

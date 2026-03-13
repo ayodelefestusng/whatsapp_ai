@@ -1103,3 +1103,21 @@ memory usage: 756.0 bytes
 2026-03-13 12:48:21,090 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] Media API response status: 201
 2026-03-13 12:48:21,091 [DEBUG] urllib3.connectionpool:_new_conn:1049 - Starting new HTTPS connection (1): whatsapp-1-evolution-api.xqqhik.easypanel.host:443
 2026-03-13 12:48:23,930 [DEBUG] urllib3.connectionpool:_make_request:544 - https://whatsapp-1-evolution-api.xqqhik.easypanel.host:443 "POST /message/sendText/session1 HTTP/1.1" 201 None
+2026-03-13 13:16:59,842 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
+2026-03-13 13:16:59,859 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:16:59,863 [DEBUG] matplotlib:<module>:1560 - interactive is False
+2026-03-13 13:16:59,864 [DEBUG] matplotlib:<module>:1561 - platform is win32
+2026-03-13 13:16:59,961 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:16:59,966 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
+2026-03-13 13:17:19,055 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
+2026-03-13 13:17:19,065 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:17:19,071 [DEBUG] matplotlib:<module>:1560 - interactive is False
+2026-03-13 13:17:19,071 [DEBUG] matplotlib:<module>:1561 - platform is win32
+2026-03-13 13:17:19,159 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:17:19,171 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
+2026-03-13 13:17:31,737 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
+2026-03-13 13:17:31,745 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:17:31,749 [DEBUG] matplotlib:<module>:1560 - interactive is False
+2026-03-13 13:17:31,750 [DEBUG] matplotlib:<module>:1561 - platform is win32
+2026-03-13 13:17:31,812 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
+2026-03-13 13:17:31,817 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json

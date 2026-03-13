@@ -1,283 +1,31 @@
-2026-03-13 13:39:48,514 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:39:48,527 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:39:48,531 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:39:48,532 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:39:48,612 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:39:48,619 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:39:51,748 [INFO] HR_AGENT:log_info:27 - [Tenant: unknown | Conversation: unknown] Received webhook request
-2026-03-13 13:39:51,749 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] Processing message from 2348021299221: I need chart of monhtly transaction count from inception till date check customer_transaction schema e
-2026-03-13 13:39:51,749 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Starting message processing pipeline
-2026-03-13 13:39:51,750 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr]  Employee ID: obinna.kelechi.adewale@dignityconcept.tech-message Content: I need chart of monhtly transaction count from inception till date check customer_transaction schema e
-2026-03-13 13:39:51,750 [INFO] HR_AGENT:initialize_vector_store:625 - [VectorStore | Tenant: DMC] Initializing from disk (read-only).
-2026-03-13 13:39:54,393 [INFO] HR_AGENT:get_embeddings:516 - ✅ Embeddings model initialized.
-2026-03-13 13:39:54,394 [INFO] HR_AGENT:initialize_vector_store:630 - [VectorStore | Tenant: DMC] Embeddings ready.
-2026-03-13 13:39:54,397 [DEBUG] faiss.loader:<module>:96 - Environment variable FAISS_OPT_LEVEL is not set, so let's pick the instruction set according to the current CPU
-2026-03-13 13:39:54,398 [INFO] faiss.loader:<module>:132 - Loading faiss with AVX2 support.
-2026-03-13 13:39:54,429 [INFO] faiss.loader:<module>:134 - Successfully loaded faiss with AVX2 support.
-2026-03-13 13:39:54,443 [INFO] HR_AGENT:initialize_vector_store:642 - [VectorStore | Tenant: DMC] Loaded successfully. index_size=7
-2026-03-13 13:39:54,443 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Vector store document count: 7
-2026-03-13 13:39:54,444 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Fetching tenant AI config
-2026-03-13 13:39:59,614 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Tenant AI config fetched. Prompt ID: 1, DB URI: postgres://vectra:vectra_agoba@147.182.194.8:5433/vectra?sslmode=disable
-2026-03-13 13:39:59,956 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Fetched prompt config
-2026-03-13 13:40:00,425 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Prompt template found: """
+2026-03-13 17:34:01,391 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: string] Tenant AI config fetched. Prompt ID: 1, DB URI: postgres://vectra:vectra_agoba@147.182.194.8:5433/vectra?sslmode=disable
+2026-03-13 17:34:01,825 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: string] Fetched prompt config
+2026-03-13 17:34:02,152 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: string] Prompt template found: """
     You are Victoria, the AI-powered virtual ...
-2026-03-13 13:40:00,426 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] Tenant config prepared. DB URI present: True
-2026-03-13 13:40:04,532 [INFO] HR_AGENT:get_model:112 - ✅ Model and tools initialized successfully.
-2026-03-13 13:40:06,966 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:07,149 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002040F519A90>
-2026-03-13 13:40:07,150 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x000002044772F020> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:07,267 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002040F36D590>
-2026-03-13 13:40:07,268 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:07,269 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:07,270 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:08,843 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:08,843 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:13,465 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=1877ad99-9a22-452c-8da8-4bb1c39dd32d; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'8f90cc27-7cfe-40b5-af87-bd0bcecf55a4'), (b'Content-Length', b'1136'), (b'date', b'Fri, 13 Mar 2026 12:40:13 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-e2d30131c2a6e1792e42a6dd0ea9afe0-b5794a75f28b3e33-00'), (b'x-cloud-trace-context', b'e2d30131c2a6e1792e42a6dd0ea9afe0/13076564863487786547'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:13,470 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:13,472 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:13,473 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:13,476 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:13,478 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:13,479 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:13,481 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:13,489 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: phone_numbdeeeddeDdssdDDssDr] sql_query_tool invoked with query: Show the monthly transaction count from the customer_transaction table from the earliest date to the latest date.
-2026-03-13 13:40:36,530 [INFO] HR_AGENT:get_model:112 - ✅ Model and tools initialized successfully.
-2026-03-13 13:40:38,411 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:38,534 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447A8E0D0>
-2026-03-13 13:40:38,534 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020447AABDA0> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:38,644 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447908180>
-2026-03-13 13:40:38,645 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:38,646 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:38,646 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:38,647 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:38,647 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:39,773 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=7792141d-6582-4122-a327-8a6646126697; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'2427409d-f778-4f6c-9fe9-8c20a779d9e0'), (b'Content-Length', b'514'), (b'date', b'Fri, 13 Mar 2026 12:40:39 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-a912fd77845a95793752ec6cadb05284-bebd6958ae50d2f8-00'), (b'x-cloud-trace-context', b'a912fd77845a95793752ec6cadb05284/13744257467407192824'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:39,774 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:39,774 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:39,775 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:39,775 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:39,776 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:39,776 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:39,776 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:40,455 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:41,010 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447908640>
-2026-03-13 13:40:41,011 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020447AABD10> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:41,125 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447A9A450>
-2026-03-13 13:40:41,125 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:41,126 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:41,126 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:41,127 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:41,127 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:42,271 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=dac26263-a1ce-427c-a5a0-1a688e3f5d00; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'a17bf8fc-f271-49a5-a0d4-1ce21a47adf7'), (b'Content-Length', b'493'), (b'date', b'Fri, 13 Mar 2026 12:40:42 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-6e944fc8df1e129e3158b1278b6df739-b8ad0ee64f297dc6-00'), (b'x-cloud-trace-context', b'6e944fc8df1e129e3158b1278b6df739/13307308856283069894'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:42,272 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:42,273 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:42,273 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:42,274 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:42,274 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:42,274 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:42,275 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:42,282 [WARNING] py.warnings:_showwarnmsg:110 - C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\langchain_community\utilities\sql_database.py:363: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "ats_application, ats_candidate, ats_jobposting, employees_employee, org_jobrole", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
-  metadata_table_names = [tbl.name for tbl in self._metadata.sorted_tables]
-
-2026-03-13 13:40:42,290 [WARNING] py.warnings:_showwarnmsg:110 - C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\langchain_community\utilities\sql_database.py:375: SAWarning: Cannot correctly sort tables; there are unresolvable cycles between tables "ats_application, ats_candidate, ats_jobposting, employees_employee, org_jobrole", which is usually caused by mutually dependent foreign key constraints.  Foreign key constraints involving these tables will not be considered; this warning may raise an error in a future release.
-  for tbl in self._metadata.sorted_tables
-
-2026-03-13 13:40:44,517 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:44,670 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447A2A690>
-2026-03-13 13:40:44,671 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x00000204478FC7A0> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:44,893 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447A2A030>
-2026-03-13 13:40:44,894 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:44,895 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:44,896 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:44,897 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:44,898 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:46,100 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=a01829cf-4a99-4a4b-92e7-7cd8709f5c43; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'e81cc557-f208-475e-b91d-8a015ae8a8cc'), (b'Content-Length', b'597'), (b'date', b'Fri, 13 Mar 2026 12:40:45 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-3e3a35f6271e5b1bdb62928450016e43-35f2353c0d8ce4ac-00'), (b'x-cloud-trace-context', b'3e3a35f6271e5b1bdb62928450016e43/3887227960415806636'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:46,101 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:46,102 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:46,103 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:46,104 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:46,105 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:46,106 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:46,108 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:47,956 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:48,122 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002044815E950>
-2026-03-13 13:40:48,122 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020447AAAA80> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:48,292 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x000002044815EC50>
-2026-03-13 13:40:48,293 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:48,293 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:48,293 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:48,294 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:48,295 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:50,765 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=9f2405de-a29b-4a21-ab6e-8b931166d50f; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'3b90b300-d913-48c4-87a9-054fea319827'), (b'Content-Length', b'982'), (b'date', b'Fri, 13 Mar 2026 12:40:50 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'f704753446f24149cce6f7d2000c9f5c/1340264325238318746'), (b'traceparent', b'00-f704753446f24149cce6f7d2000c9f5c-1299934d82f5669a-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:50,766 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:50,766 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:50,767 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:50,767 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:50,768 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:50,768 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:50,769 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:51,294 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:51,734 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447914320>
-2026-03-13 13:40:51,735 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020447AAA960> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:51,866 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447914230>
-2026-03-13 13:40:51,867 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:51,868 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:51,868 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:51,868 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:51,869 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:54,457 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=df810951-623b-4c71-a24b-28f2583f4edd; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'ac84e282-ebcb-4d44-81b2-9208e26c6d03'), (b'Content-Length', b'1747'), (b'date', b'Fri, 13 Mar 2026 12:40:54 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-ecd8bb89864d52da8fecd3be066125df-984821eae731d184-00'), (b'x-cloud-trace-context', b'ecd8bb89864d52da8fecd3be066125df/10973057784873079172'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:54,458 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:54,459 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:54,459 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:54,459 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:54,460 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:54,460 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:54,461 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:54,998 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:40:55,136 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204478C51D0>
-2026-03-13 13:40:55,137 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x0000020447AAAC30> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:40:55,257 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204478C6890>
-2026-03-13 13:40:55,258 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:55,258 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:40:55,258 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:40:55,259 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:40:55,259 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:40:56,671 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=e9fc13bf-608d-484f-add3-a09dca147ae8; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'4fd37673-8682-4592-9a1d-2ae6bdd7e64b'), (b'Content-Length', b'651'), (b'date', b'Fri, 13 Mar 2026 12:40:56 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'18ebea4c4fab1c9bd37084aed0a050e6/9638854690648116950'), (b'traceparent', b'00-18ebea4c4fab1c9bd37084aed0a050e6-85c41745b5b04ed6-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:40:56,672 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:40:56,673 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:40:56,673 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:40:56,674 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:40:56,674 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:40:56,674 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:40:56,675 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:40:59,768 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:41:00,919 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204479BA8F0>
-2026-03-13 13:41:00,921 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x00000204478FC680> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:41:02,414 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204480DE5D0>
-2026-03-13 13:41:02,414 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:02,415 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:41:02,415 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:41:02,416 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:41:02,416 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:06,662 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=d18a14f6-0c63-473a-94df-b59f1927c268; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'4e92bba8-f7c5-4ef6-a100-59dd8c08ddf4'), (b'Content-Length', b'1421'), (b'date', b'Fri, 13 Mar 2026 12:41:06 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'4b9a8bbeb44eb38e459726d10e25705b/9708865292540784097'), (b'traceparent', b'00-4b9a8bbeb44eb38e459726d10e25705b-86bcd18b36032de1-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:41:06,664 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:41:06,666 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:41:06,671 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:41:06,673 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:41:06,674 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:41:06,676 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:41:06,678 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:41:09,589 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:41:11,005 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204480DE450>
-2026-03-13 13:41:11,006 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x00000204478FC8C0> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:41:12,503 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000204478BC050>
-2026-03-13 13:41:12,503 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:12,504 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:41:12,504 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:41:12,505 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:41:12,505 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:15,648 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=73f3c444-dd26-4a74-80b9-4b57a0c59c97; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'a9d2cbb7-3fc4-4931-ae47-b616895e0d08'), (b'Content-Length', b'809'), (b'date', b'Fri, 13 Mar 2026 12:41:15 GMT'), (b'server', b'Google Frontend'), (b'traceparent', b'00-0cb67f0a8843ba2a8f6f93f688779408-b81fa80b65b6b51f-00'), (b'x-cloud-trace-context', b'0cb67f0a8843ba2a8f6f93f688779408/13267507794161349919'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:41:15,649 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:41:15,649 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:41:15,650 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:41:15,650 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:41:15,651 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:41:15,651 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:41:15,652 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:41:17,255 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
-2026-03-13 13:41:18,338 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447E535F0>
-2026-03-13 13:41:18,338 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x00000204478FC9E0> server_hostname='ollama.com' timeout=60.0
-2026-03-13 13:41:18,484 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x0000020447994C30>
-2026-03-13 13:41:18,485 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:18,485 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
-2026-03-13 13:41:18,486 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
-2026-03-13 13:41:18,486 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
-2026-03-13 13:41:18,487 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
-2026-03-13 13:41:21,968 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=188e7973-c280-4922-8929-aa8958a679d1; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'4b0a242a-2573-40b2-b621-a52a28343686'), (b'Content-Length', b'1140'), (b'date', b'Fri, 13 Mar 2026 12:41:21 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'b448c20c5eb8399c6b9b9e7c785411c1/7739978682846508539'), (b'traceparent', b'00-b448c20c5eb8399c6b9b9e7c785411c1-6b69ed9a982975fb-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
-2026-03-13 13:41:21,970 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
-2026-03-13 13:41:21,971 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
-2026-03-13 13:41:21,972 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
-2026-03-13 13:41:21,973 [DEBUG] httpcore.http11:trace:47 - response_closed.started
-2026-03-13 13:41:21,974 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
-2026-03-13 13:41:21,975 [DEBUG] httpcore.connection:trace:47 - close.started
-2026-03-13 13:41:21,976 [DEBUG] httpcore.connection:trace:47 - close.complete
-2026-03-13 13:41:22,690 [INFO] HR_AGENT:process_message:1284 -  Raw LLM response  : {'messages': [HumanMessage(content='I need chart of monhtly transaction count from inception till date check customer_transaction schema e', additional_kwargs={}, response_metadata={}, id='3b4af842-6552-43a6-ad5f-709c58215aef'), HumanMessage(content='I need chart of monhtly transaction count from inception till date check customer_transaction schema e', additional_kwargs={}, response_metadata={}, id='32d837f9-3305-4ae3-bf5e-d7cf8c5992d1'), AIMessage(content='', additional_kwargs={}, response_metadata={}, id='lc_run--019ce736-1136-7103-9b60-9ff9fbedd67b-0', tool_calls=[{'name': 'sql_query_tool', 'args': {'current_tool_id': None, 'query': 'Show the monthly transaction count from the customer_transaction table from the earliest date to the latest date.', 'state': None}, 'id': 'call_dycg5v5r', 'type': 'tool_call'}], invalid_tool_calls=[]), ToolMessage(content='{"sql_result": "No transactions found for tenant DMC (tenant_id=1). Returned empty result set.", "data": []}', name='sql_query_tool', id='6c444c06-03fa-49ec-ac19-34c7b5fcaf45', tool_call_id='call_dycg5v5r'), AIMessage(content='{\n  "answer": "I couldn\'t find any transaction records in the\u202fcustomer_transaction\u202ftable for your account, so there’s no data to generate a monthly transaction count chart. This could mean that no transactions have been recorded yet, or they might be stored under a different tenant or schema. If you believe there should be data, you may want to verify the source or let me know any alternative details, and I’ll be happy to try again.",\n  "leave_application": null,\n  "visualization_analysis": null,\n  "visualization_image": null\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce737-2431-7221-8927-0972a5ebce12-0', tool_calls=[], invalid_tool_calls=[])]}
-2026-03-13 13:41:22,690 [INFO] HR_AGENT:process_message:1285 - Final state keys: ['messages']
-2026-03-13 13:41:22,691 [INFO] HR_AGENT:process_message:1288 - Final state viz_image present: False
-2026-03-13 13:41:22,691 [INFO] HR_AGENT:process_message:1293 -  LLM response messages Raweeee : [HumanMessage(content='I need chart of monhtly transaction count from inception till date check customer_transaction schema e', additional_kwargs={}, response_metadata={}, id='3b4af842-6552-43a6-ad5f-709c58215aef'), HumanMessage(content='I need chart of monhtly transaction count from inception till date check customer_transaction schema e', additional_kwargs={}, response_metadata={}, id='32d837f9-3305-4ae3-bf5e-d7cf8c5992d1'), AIMessage(content='', additional_kwargs={}, response_metadata={}, id='lc_run--019ce736-1136-7103-9b60-9ff9fbedd67b-0', tool_calls=[{'name': 'sql_query_tool', 'args': {'current_tool_id': None, 'query': 'Show the monthly transaction count from the customer_transaction table from the earliest date to the latest date.', 'state': None}, 'id': 'call_dycg5v5r', 'type': 'tool_call'}], invalid_tool_calls=[]), ToolMessage(content='{"sql_result": "No transactions found for tenant DMC (tenant_id=1). Returned empty result set.", "data": []}', name='sql_query_tool', id='6c444c06-03fa-49ec-ac19-34c7b5fcaf45', tool_call_id='call_dycg5v5r'), AIMessage(content='{\n  "answer": "I couldn\'t find any transaction records in the\u202fcustomer_transaction\u202ftable for your account, so there’s no data to generate a monthly transaction count chart. This could mean that no transactions have been recorded yet, or they might be stored under a different tenant or schema. If you believe there should be data, you may want to verify the source or let me know any alternative details, and I’ll be happy to try again.",\n  "leave_application": null,\n  "visualization_analysis": null,\n  "visualization_image": null\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce737-2431-7221-8927-0972a5ebce12-0', tool_calls=[], invalid_tool_calls=[])]
-2026-03-13 13:41:22,692 [INFO] HR_AGENT:process_message:1326 - LLM response Process message extraction: I couldn't find any transaction records in the customer_transaction table for your account, so there’s no data to generate a monthly transaction count chart. This could mean that no transactions have ...
-2026-03-13 13:41:22,692 [INFO] HR_AGENT:process_message:1354 - Processed response dictionary keys: ['text', 'viz_image', 'viz_analysis']
-2026-03-13 13:41:22,693 [INFO] HR_AGENT:process_message:1355 - Processed response viz_image value present: False
-2026-03-13 13:41:22,693 [WARNING] HR_AGENT:process_message:1360 - No visualization image found in process_message final result.
-2026-03-13 13:41:22,693 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] Chatbot response keys: ['text', 'viz_image', 'viz_analysis']
-2026-03-13 13:41:22,694 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] Response viz_image present: False
-2026-03-13 13:41:22,694 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] No visualization image found in dict response.
-2026-03-13 13:41:22,696 [DEBUG] urllib3.connectionpool:_new_conn:1049 - Starting new HTTPS connection (1): whatsapp-1-evolution-api.xqqhik.easypanel.host:443
-2026-03-13 13:41:25,632 [DEBUG] urllib3.connectionpool:_make_request:544 - https://whatsapp-1-evolution-api.xqqhik.easypanel.host:443 "POST /message/sendText/session1 HTTP/1.1" 201 880
-2026-03-13 13:41:25,636 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: 2348021299221] Text message API response: {'key': {'remoteJid': '2348021299221@s.whatsapp.net', 'fromMe': True, 'id': '3EB0E369FCA36C9DAAD81D'}, 'pushName': 'Você', 'status': 'PENDING', 'message': {'conversation': "I couldn't find any transaction records in the\u202fcustomer_transaction\u202ftable for your account, so there’s no data to generate a monthly transaction count chart. This could mean that no transactions have been recorded yet, or they might be stored under a different tenant or schema. If you believe there should be data, you may want to verify the source or let me know any alternative details, and I’ll be happy to try again."}, 'contextInfo': {'mentionedJid': [], 'groupMentions': [], 'ephemeralSettingTimestamp': {'low': 1773232884, 'high': 0, 'unsigned': False}, 'disappearingMode': {'initiator': 0}}, 'messageType': 'conversation', 'messageTimestamp': 1773405684, 'instanceId': '712a4424-63a3-449b-8c7f-77488faf46f4', 'source': 'web'}
-2026-03-13 13:41:35,093 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:41:35,103 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:41:35,104 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:41:35,105 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:41:35,164 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:41:35,169 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:42:10,257 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:42:10,265 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:42:10,267 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:42:10,267 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:42:10,327 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:42:10,333 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:43:14,718 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:43:14,726 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:43:14,729 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:43:14,730 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:43:14,807 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:43:14,815 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:43:26,866 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:43:26,875 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:43:26,877 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:43:26,878 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:43:26,937 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:43:26,941 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:44:07,111 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:44:07,117 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:44:07,119 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:44:07,119 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:44:07,170 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:44:07,175 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:45:43,224 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:45:43,245 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:45:43,250 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:45:43,251 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:45:43,383 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:45:43,395 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:46:05,093 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:46:05,101 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:46:05,106 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:46:05,106 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:46:05,174 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:46:05,178 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:46:50,088 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:46:50,095 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:46:50,098 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:46:50,099 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:46:50,158 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:46:50,163 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:47:04,163 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:47:04,170 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:47:04,172 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:47:04,173 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:47:04,242 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:47:04,247 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:47:40,037 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:47:40,061 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:47:40,066 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:47:40,066 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:47:40,235 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:47:40,259 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
-2026-03-13 13:48:07,576 [DEBUG] matplotlib:wrapper:342 - matplotlib data path: C:\Users\Pro\Desktop\PROJECT\TEST\test_env\Lib\site-packages\matplotlib\mpl-data
-2026-03-13 13:48:07,587 [DEBUG] matplotlib:wrapper:342 - CONFIGDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:48:07,592 [DEBUG] matplotlib:<module>:1560 - interactive is False
-2026-03-13 13:48:07,592 [DEBUG] matplotlib:<module>:1561 - platform is win32
-2026-03-13 13:48:07,682 [DEBUG] matplotlib:wrapper:342 - CACHEDIR=C:\Users\Pro\.matplotlib
-2026-03-13 13:48:07,689 [DEBUG] matplotlib.font_manager:_load_fontmanager:1635 - Using fontManager instance from C:\Users\Pro\.matplotlib\fontlist-v390.json
+2026-03-13 17:34:02,153 [INFO] HR_AGENT:log_info:27 - [Tenant: DMC | Conversation: string] Tenant config prepared. DB URI present: True
+2026-03-13 17:34:06,119 [INFO] HR_AGENT:get_model:112 - ✅ Model and tools initialized successfully.
+2026-03-13 17:34:09,821 [DEBUG] httpcore.connection:trace:47 - connect_tcp.started host='ollama.com' port=443 local_address=None timeout=60.0 socket_options=None
+2026-03-13 17:34:09,986 [DEBUG] httpcore.connection:trace:47 - connect_tcp.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000269EB5E1A90>
+2026-03-13 17:34:09,986 [DEBUG] httpcore.connection:trace:47 - start_tls.started ssl_context=<ssl.SSLContext object at 0x00000269FB7CF0B0> server_hostname='ollama.com' timeout=60.0
+2026-03-13 17:34:10,163 [DEBUG] httpcore.connection:trace:47 - start_tls.complete return_value=<httpcore._backends.sync.SyncStream object at 0x00000269EA43D090>
+2026-03-13 17:34:10,163 [DEBUG] httpcore.http11:trace:47 - send_request_headers.started request=<Request [b'POST']>
+2026-03-13 17:34:10,164 [DEBUG] httpcore.http11:trace:47 - send_request_headers.complete
+2026-03-13 17:34:10,165 [DEBUG] httpcore.http11:trace:47 - send_request_body.started request=<Request [b'POST']>
+2026-03-13 17:34:10,165 [DEBUG] httpcore.http11:trace:47 - send_request_body.complete
+2026-03-13 17:34:10,166 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.started request=<Request [b'POST']>
+2026-03-13 17:34:11,532 [DEBUG] httpcore.http11:trace:47 - receive_response_headers.complete return_value=(b'HTTP/1.1', 200, b'OK', [(b'content-type', b'application/json'), (b'set-cookie', b'aid=256a7b82-b4a0-411a-ab61-554f0fe3a075; Path=/; Max-Age=31536000; HttpOnly; Secure; SameSite=Lax'), (b'x-build-commit', b'24e7057b701fac4a1ccb4a2fe67fc5fba432e1fe'), (b'x-build-time', b'2026-03-12T22:49:28-07:00'), (b'x-frame-options', b'DENY'), (b'x-request-id', b'e26caf00-5d5b-4222-a1ac-1b720a91d9c7'), (b'Content-Length', b'524'), (b'date', b'Fri, 13 Mar 2026 16:34:11 GMT'), (b'server', b'Google Frontend'), (b'x-cloud-trace-context', b'e2c30caea6d403ac5ef606b92487c854/8695880086820330647'), (b'traceparent', b'00-e2c30caea6d403ac5ef606b92487c854-78adf8ddc0519c97-00'), (b'via', b'1.1 google'), (b'Alt-Svc', b'h3=":443"; ma=2592000,h3-29=":443"; ma=2592000')])
+2026-03-13 17:34:11,536 [INFO] httpx:_send_single_request:1025 - HTTP Request: POST https://ollama.com/api/chat "HTTP/1.1 200 OK"
+2026-03-13 17:34:11,538 [DEBUG] httpcore.http11:trace:47 - receive_response_body.started request=<Request [b'POST']>
+2026-03-13 17:34:11,540 [DEBUG] httpcore.http11:trace:47 - receive_response_body.complete
+2026-03-13 17:34:11,542 [DEBUG] httpcore.http11:trace:47 - response_closed.started
+2026-03-13 17:34:11,543 [DEBUG] httpcore.http11:trace:47 - response_closed.complete
+2026-03-13 17:34:11,545 [DEBUG] httpcore.connection:trace:47 - close.started
+2026-03-13 17:34:11,548 [DEBUG] httpcore.connection:trace:47 - close.complete
+2026-03-13 17:34:13,028 [INFO] HR_AGENT:process_message:1284 -  Raw LLM response  : {'messages': [HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='072232c0-7215-4328-9bce-dddd07100684'), HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='767f38c2-41c8-4f86-8c82-e1f0d78aa816'), AIMessage(content='{\n  "answer": "I’m here to help! Could you let me know what you’d like assistance with?"\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce63d-294b-7691-a1c7-4681a7a41ebe-0', tool_calls=[], invalid_tool_calls=[]), HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='68ff9696-8073-4e15-b82a-70d710216b46'), AIMessage(content='{\n  "answer": "Hello! I’m Victoria, your Gatik virtual assistant. How can I assist you today?"\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce80c-5903-71f2-b178-c09398a9c822-0', tool_calls=[], invalid_tool_calls=[])]}
+2026-03-13 17:34:13,030 [INFO] HR_AGENT:process_message:1285 - Final state keys: ['messages']
+2026-03-13 17:34:13,030 [INFO] HR_AGENT:process_message:1288 - Final state viz_image present: False
+2026-03-13 17:34:13,031 [INFO] HR_AGENT:process_message:1293 -  LLM response messages Raweeee : [HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='072232c0-7215-4328-9bce-dddd07100684'), HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='767f38c2-41c8-4f86-8c82-e1f0d78aa816'), AIMessage(content='{\n  "answer": "I’m here to help! Could you let me know what you’d like assistance with?"\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce63d-294b-7691-a1c7-4681a7a41ebe-0', tool_calls=[], invalid_tool_calls=[]), HumanMessage(content='string', additional_kwargs={}, response_metadata={}, id='68ff9696-8073-4e15-b82a-70d710216b46'), AIMessage(content='{\n  "answer": "Hello! I’m Victoria, your Gatik virtual assistant. How can I assist you today?"\n}', additional_kwargs={}, response_metadata={}, id='lc_run--019ce80c-5903-71f2-b178-c09398a9c822-0', tool_calls=[], invalid_tool_calls=[])]
+2026-03-13 17:34:13,032 [INFO] HR_AGENT:process_message:1326 - LLM response Process message extraction: Hello! I’m Victoria, your Gatik virtual assistant. How can I assist you today?...
+2026-03-13 17:34:13,034 [INFO] HR_AGENT:process_message:1354 - Processed response dictionary keys: ['text', 'viz_image', 'viz_analysis']
+2026-03-13 17:34:13,034 [INFO] HR_AGENT:process_message:1355 - Processed response viz_image value present: False
+2026-03-13 17:34:13,035 [WARNING] HR_AGENT:process_message:1360 - No visualization image found in process_message final result.

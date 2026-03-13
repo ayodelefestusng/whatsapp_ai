@@ -5,7 +5,7 @@ import re
 import requests
 import tempfile
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, logger
 from pydantic import BaseModel
 from typing import Optional
 
@@ -294,7 +294,7 @@ async def whatsapp_webhook(request: Request):
         message_text='I need chart of monhtly transaction count from inception till date check customer_transaction schema e'
         employee_id = DEFAULT_EMPLOYEE_ID
         phone_number = "2348021299221"
-        conversation_id = "phone_numbdddeDdssdDDssDr"
+        conversation_id = "phone_numbdeeeddeDdssdDDssDr"
         tenant_id = "DMC"
         push_name = "User"
         log_info(f"Processing message from {phone_number}: {message_text}", tenant_id, phone_number)
@@ -342,8 +342,169 @@ async def whatsapp_webhook(request: Request):
 # if __name__ == "__main__":
 #     uvicorn.run(app, host=" (")
 
+# import imghdr
+import base64
+import requests
+
+# ...existing code...
+import base64
+import requests
+import os
+
+def send_media_messagevgemini(number: str, base64_image: str, caption: str):
+    # Strip any data URI prefix if present
+    if base64_image.startswith("data:"):
+        base64_image = base64_image.split(",", 1)[1]
+
+    base64_image = base64_image.strip()
+
+    try:
+        img_bytes = base64.b64decode(base64_image, validate=True)
+    except Exception as e:
+        logger.error(f"Invalid base64 image data: {e}")
+        return None
+
+    # Detect Mimetype by checking file signatures (magic bytes)
+    # PNG starts with \x89PNG, JPEG starts with \xff\xd8
+    if img_bytes.startswith(b'\x89PNG'):
+        mimetype = "image/png"
+    elif img_bytes.startswith(b'\xff\xd8'):
+        mimetype = "image/jpeg"
+    else:
+        mimetype = "image/png" # Default fallback
+
+    # Note: Evolution API expects the base64 string in the "media" or "base64" key
+    # depending on your specific version/instance setup.
+    payload = {
+        "number": number.replace("+", "").strip() if "@" not in number else number,
+        "mediatype": "image",
+        "mimetype": mimetype,
+        "media": base64_image, 
+        "caption": caption,
+    }
+
+    url = os.getenv(
+        "WHATSAPP_MEDIA_URL",
+        "https://whatsapp-1-evolution-api.xqqhik.easypanel.host/message/sendMedia/session1"
+    )
+
+    # CRITICAL: Added 'apikey' to headers as Evolution API requires it
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": os.getenv("EVOLUTION_API_KEY") 
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
+        log_info(f"Media API response status: {resp.status_code} body: {resp.text}", "system", "system")
+        return resp
+    except Exception as e:
+        log_error(f"Failed to send media request: {e}", "system", "system")
+        return None
+import base64
+import requests
+import os
+import time
 
 def send_media_message(number: str, base64_image: str, caption: str):
+    log_info(f"Preparing to send media message to {number}. Image length: {len(base64_image)}", "system", "system")
+    # Strip any data URI prefix
+    if base64_image.startswith("data:"):
+        base64_image = base64_image.split(",", 1)[1]
+
+    base64_image = base64_image.strip()
+
+    try:
+        img_bytes = base64.b64decode(base64_image, validate=True)
+    except Exception as e:
+        log_error(f"Invalid base64 image data: {e}", "system", "system")
+        return None
+
+    # Detect Mimetype/Extension
+    if img_bytes.startswith(b'\x89PNG'):
+        mimetype, ext = "image/png", ".png"
+    elif img_bytes.startswith(b'\xff\xd8'):
+        mimetype, ext = "image/jpeg", ".jpg"
+    else:
+        mimetype, ext = "image/png", ".png"
+
+    # --- LOCAL FALLBACK: Save to /temp ---
+    try:
+        temp_dir = os.path.join(os.getcwd(), "temp_viz")
+        os.makedirs(temp_dir, exist_ok=True)
+        filename = f"viz_{int(time.time())}_{number.replace('@', '_')}{ext}"
+        filepath = os.path.join(temp_dir, filename)
+        
+        with open(filepath, "wb") as f:
+            f.write(img_bytes)
+        log_info(f"Image saved locally to: {filepath}", "system", "system")
+    except Exception as e:
+        log_error(f"Failed to save local image copy: {e}", "system", "system")
+
+    # --- API DISPATCH ---
+    payload = {
+        "number": number.replace("+", "").strip() if "@" not in number else number,
+        "mediatype": "image",
+        "mimetype": mimetype,
+        "media": base64_image, 
+        "caption": caption,
+    }
+
+    url = os.getenv(
+        "WHATSAPP_MEDIA_URL",
+        "https://whatsapp-1-evolution-api.xqqhik.easypanel.host/message/sendMedia/session1"
+    )
+
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": os.getenv("EVOLUTION_API_KEY") 
+    }
+
+    try:
+        resp = requests.post(url, json=payload, headers=headers, timeout=30)
+        log_info(f"Media API response status: {resp.status_code}", "system", "system")
+        return resp
+    except Exception as e:
+        log_error(f"API delivery failed: {e}", "system", "system")
+        return None
+
+
+def send_media_messagev2(number: str, base64_image: str, caption: str):
+    # Strip any data URI prefix
+    if base64_image.startswith("data:"):
+        base64_image = base64_image.split(",", 1)[1]
+
+    base64_image = base64_image.strip()
+
+    try:
+        img_bytes = base64.b64decode(base64_image, validate=True)
+    except Exception as e:
+        logger.error(f"Invalid base64 image data: {e}")
+        return None
+
+    kind = imghdr.what(None, h=img_bytes)
+    mimetype = "image/png" if kind == "png" else "image/jpeg" if kind in ("jpeg", "jpg") else "application/octet-stream"
+
+    payload = {
+        "number": number,
+        "mediatype": "image",
+        "mimetype": mimetype,
+        "media": base64_image,
+        "caption": caption,
+    }
+
+    url = os.getenv(
+        "WHATSAPP_MEDIA_URL",
+        "https://whatsapp-1-evolution-api.xqqhik.easypanel.host/message/sendMedia/session1"
+    )
+
+    resp = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+    log_info(f"Media API response status: {resp.status_code} body: {resp.text}", "system", "system")
+    return resp
+
+
+
+def send_media_messagev1(number: str, base64_image: str, caption: str):
     url = f"{EVOLUTION_API_URL}/message/sendMedia/{EVOLUTION_INSTANCE}"
     headers = {"apikey": EVOLUTION_API_KEY, "Content-Type": "application/json"}
     

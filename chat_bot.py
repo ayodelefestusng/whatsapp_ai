@@ -1234,7 +1234,20 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         logger.info(f" LLM response messages Raweeee : {messages}")
         last_msg = messages[-1] if messages else None
         extracted_data = {}
+        viz_from_tool = {"image": None, "analysis": None}
         
+        for msg in reversed(messages):
+            if hasattr(msg, "name") and msg.name == "generate_visualization_tool":
+                try:
+                    import json
+                    tool_content = json.loads(msg.content)
+                    viz_res = tool_content.get("visualization_result", {})
+                    viz_from_tool["image"] = viz_res.get("image_base64")
+                    viz_from_tool["analysis"] = viz_res.get("analysis")
+                    logger.info("Successfully extracted image and analysis from ToolMessage.")
+                    break # Stop once we find the most recent viz tool result
+                except Exception as e:
+                    logger.error(f"Failed to parse visualization tool content: {e}")
         if last_msg:
             import json
             import re
@@ -1259,12 +1272,16 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
             else:
                  extracted_text = str(current_answer)
 
+            # result_data = {
+            #     "text": extracted_text,
+            #     "viz_image": extracted_data.get("visualization_image") or final_state.get("visualization_image"),
+            #     "viz_analysis": extracted_data.get("visualization_analysis") or final_state.get("visualization_analysis")
+            # }
             result_data = {
-                "text": extracted_text,
-                "viz_image": extracted_data.get("visualization_image") or final_state.get("visualization_image"),
-                "viz_analysis": extracted_data.get("visualization_analysis") or final_state.get("visualization_analysis")
-            }
-            
+            "text": extracted_data.get("answer") or extracted_data.get("text") or "",
+            "viz_image": viz_from_tool["image"] or final_state.get("visualization_image"),
+            "viz_analysis": viz_from_tool["analysis"] or final_state.get("visualization_analysis")
+        }
             if result_data["viz_analysis"] and result_data["viz_analysis"] not in result_data["text"]:
                 result_data["text"] += "\n\n" + result_data["viz_analysis"]
                 

@@ -1,34 +1,18 @@
-# Stage 1: Build
-FROM python:3.11-slim AS builder
-
-# Install uv by copying it from the official image
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-
-WORKDIR /app
-
-# Enable bytecode compilation for faster startup
-ENV UV_COMPILE_BYTECODE=1
-# Use copy mode instead of hardlinks (required for Docker)
-ENV UV_LINK_MODE=copy
-
-# Copy only dependency files first to leverage Docker caching
-COPY requirements.txt .
-
-# Install dependencies into a virtualenv
-# This replaces your "pip install" command
-# RUN uv pip install --no-cache -r requirements.txt
-RUN uv pip install --system --no-cache -r requirements.txt
-
-# Stage 2: Runtime
 FROM python:3.11-slim
 
+# Set working directory
 WORKDIR /app
 
-# Copy the installed packages from the builder stage
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Only copy requirements first
+COPY requirements.txt .
 
-# Copy your source code
+# Install dependencies without building binary extensions
+# Update the RUN command in your Dockerfile
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir --default-timeout=1000 -r requirements.txt
+# Copy source code
 COPY . .
 
-CMD ["python", "main.py"]
+# Expose port and run
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

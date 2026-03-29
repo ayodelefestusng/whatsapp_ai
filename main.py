@@ -24,6 +24,10 @@ import requests
 import os
 import time
 
+def log_debug(msg, tenant_id, conversation_id):
+    # Stub for log_debug if not imported
+    from logger_utils import logger
+    logger.debug(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
 
 
 
@@ -126,10 +130,6 @@ def fetch_and_save_pdfv1(url: str) -> str:
             raise ValueError("Google Drive returned an HTML page (possibly a virus warning or authorization requirement) instead of the PDF binary.")
         raise ValueError(f"URL did not return a PDF. Got Content-Type: {ct}")
 
-def log_debug(msg, tenant_id, conversation_id):
-    # Stub for log_debug if not imported
-    from logger_utils import logger
-    logger.debug(f"[Tenant: {tenant_id} | Conversation: {conversation_id}] {msg}")
 
 
 # --- Redis Setup ---

@@ -3,7 +3,12 @@ import json
 import logging
 import asyncio
 import os
+import httpx
 import traceback
+import httpx
+import os
+import logging
+from ollama import Client
 try:
     from ollama import Client as OllamaClient
 except Exception:
@@ -15,6 +20,12 @@ from langchain_core.outputs import ChatResult, ChatGeneration, ChatGenerationChu
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun, AsyncCallbackManagerForLLMRun
 from langchain_core.language_models import LanguageModelInput
 from langchain_core.runnables import Runnable
+from langchain_core.outputs import ChatResult, ChatGeneration, ChatGenerationChunk
+from langchain_core.utils.function_calling import convert_to_openai_function
+from langchain_core.utils.function_calling import convert_to_openai_function
+
+from pydantic import Field
+from langchain_core.language_models import BaseChatModel
 
 logger = logging.getLogger(__name__)
 
@@ -201,10 +212,6 @@ logger = logging.getLogger(__name__)
 #     async def close(self):
 #         pass
 
-from langchain_core.outputs import ChatResult, ChatGeneration, ChatGenerationChunk
-
-from pydantic import Field
-from langchain_core.language_models import BaseChatModel
 
 
 class OllamaService(BaseChatModel):
@@ -274,7 +281,7 @@ class OllamaService(BaseChatModel):
         if cloud_model.endswith("-cloud"): cloud_model = cloud_model[:-6]
         
         # Use direct httpx for the cloud call as well to bypass any library-level async logic
-        import httpx
+        
         url = "https://ollama.com/api/chat"
         payload = {
             "model": cloud_model,
@@ -348,7 +355,6 @@ class OllamaService(BaseChatModel):
         """
         Bind tools for compatibility with LangGraph and other LangChain components.
         """
-        from langchain_core.utils.function_calling import convert_to_openai_function
         openai_tools = [convert_to_openai_function(t) for t in tools]
         ollama_tools = [{"type": "function", "function": t} for t in openai_tools]
         
@@ -409,7 +415,7 @@ class OllamaServicev1(BaseChatModel):
         if cloud_model.endswith("-cloud"): cloud_model = cloud_model[:-6]
         
         # Use direct httpx for the cloud call as well to bypass any library-level async logic
-        import httpx
+      
         url = "https://ollama.com/api/chat"
         payload = {
             "model": cloud_model,
@@ -483,7 +489,6 @@ class OllamaServicev1(BaseChatModel):
         """
         Bind tools for compatibility with LangGraph and other LangChain components.
         """
-        from langchain_core.utils.function_calling import convert_to_openai_function
         openai_tools = [convert_to_openai_function(t) for t in tools]
         ollama_tools = [{"type": "function", "function": t} for t in openai_tools]
         
@@ -492,9 +497,6 @@ class OllamaServicev1(BaseChatModel):
     async def close(self):
         pass
 
-import os
-import logging
-from ollama import Client
 class OllamaCloudWrapper:
     def __init__(self, model_name: str, host: str, api_key: str):
         self.model_name = model_name

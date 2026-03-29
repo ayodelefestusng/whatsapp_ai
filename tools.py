@@ -25,7 +25,7 @@ from langchain_core.messages import (
     AnyMessage,
 )
 from langchain_community.vectorstores import FAISS
-
+from langchain_community.utilities import SQLDatabase
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from langgraph.prebuilt import ToolNode, create_react_agent, tools_condition
@@ -42,15 +42,22 @@ from langchain.tools import tool, ToolRuntime
 from langgraph.types import Command
 from langchain.tools import tool
 from langchain.agents.structured_output import ToolStrategy
-
+from sqlalchemy import text
 from langchain.agents.middleware import before_model
 from langchain.agents import create_agent, AgentState
 from langgraph.runtime import Runtime
 from langchain.messages import RemoveMessage
 from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from typing import Any
-# from myproject_revisit.org.management.commands import state
+from datetime import datetime
+from urllib.parse import urlparse
+import json
+from sqlalchemy import create_engine
+import re
 import json 
+
+# from myproject_revisit.org.management.commands import state
+
 from ollama_service import OllamaService
 from base import (MultiplicationInput,
 PayslipQuery,LeaveBalanceRequest,PayslipListQuery,PayslipInfo,PayslipSummary,PayslipListResponse,
@@ -251,7 +258,7 @@ def validate_leave_balance_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         
         try:
@@ -354,7 +361,7 @@ def submit_leave_application_tool(runtime: ToolRuntime[Context], **kwargs)-> str
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from datetime import datetime
+        
         # Parse dates DDMMYYYY
         try:
             start_date = datetime.strptime(start_str, "%d%m%Y").date()
@@ -575,7 +582,18 @@ def calculate_num_of_days_tool(runtime: ToolRuntime[Context], **kwargs)-> int:
         # Fallback to a standard diff if parsing fails, or return 0
         return 0
 
-
+from sqlalchemy import text
+from sqlalchemy import text
+from datetime import datetime
+import random
+from sqlalchemy import text
+import psycopg2
+from sqlalchemy import text
+from sqlalchemy import text
+from sqlalchemy import create_engine
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits import SQLDatabaseToolkit
+from langgraph.prebuilt import create_react_agent
 # 2. Update the Tool Function
 @tool("search_job_opportunities_tool", args_schema=SearchJobOpportunitiesRequest)
 def search_job_opportunities_tool(runtime: ToolRuntime[Context], **kwargs)-> str: 
@@ -600,7 +618,7 @@ def search_job_opportunities_tool(runtime: ToolRuntime[Context], **kwargs)-> str
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         try:
             with engine.connect() as conn:
@@ -676,7 +694,7 @@ def fetch_leave_status_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         
         try:
@@ -821,19 +839,19 @@ def create_customer_profile_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from datetime import datetime
+       
         try:
             dob = datetime.strptime(dob_str, "%Y-%m-%d").date()
         except:
             return ToolMessage(content="Error: Invalid date format for date_of_birth. Use YYYY-MM-DD.", tool_call_id=tid)
 
-        import random
+        
         # Generate 10-digit account number
         account_num = "".join([str(random.randint(0, 9)) for _ in range(10)])
         # Generate customer ID
         cust_id = f"CUST{random.randint(10000, 99999)}"
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         
         try:
@@ -1007,7 +1025,7 @@ def get_customer_details_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         
         try:
@@ -1083,7 +1101,7 @@ def update_customer_tool(runtime: ToolRuntime[Context], **kwargs)-> str:
         if db_uri.startswith("postgres://"):
             db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-        from sqlalchemy import text
+        
         engine = create_engine(db_uri)
         
         try:
@@ -1147,10 +1165,7 @@ def sql_query_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
     log_info(f"sql_query_tool invoked with query: {query}", tenant_id, conversation_id)
 
     try:
-        from sqlalchemy import create_engine
-        from langchain_community.utilities import SQLDatabase
-        from langchain_community.agent_toolkits import SQLDatabaseToolkit
-        from langgraph.prebuilt import create_react_agent
+       
         from chat_bot import get_model
 
         if not db_uri:
@@ -1272,7 +1287,6 @@ def pdf_retrieval_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
         log_error(f"PDF Retrieval Error: {str(e)}", tenant_id, conversation_id)
         return {"pdf_content": f"!!ERROR!! CODE:PDF-5001 MESSAGE: {str(e)}"}
 
-
 @tool("web_search_tool", args_schema=ToolInput)
 def web_search_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
     """
@@ -1284,7 +1298,7 @@ def web_search_tool(runtime: ToolRuntime[Context], **kwargs) -> dict:
     conversation_id = runtime.context.conversation_id
 
     log_info(f"web_search_tool invoked with query: {query}", tenant_id, conversation_id)
-    from urllib.parse import urlparse
+    
 
     # 1. Collect priority domains from context if available
     priority_domains = []
@@ -1382,7 +1396,7 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> dict
 
         if data:
             log_info("Data provided directly to visualization tool. Bypassing SQL generation.", tenant_id, conversation_id)
-            import json
+            
             if isinstance(data, str):
                 try:
                     data = json.loads(data)
@@ -1399,7 +1413,7 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> dict
             if db_uri.startswith("postgres://"):
                 db_uri = db_uri.replace("postgres://", "postgresql://", 1)
 
-            from langchain_community.utilities import SQLDatabase
+            
             db = SQLDatabase.from_uri(db_uri)
 
             # Step 1: Generate SQL from the natural language query
@@ -1419,7 +1433,7 @@ def generate_visualization_tool(runtime: ToolRuntime[Context], **kwargs) -> dict
             log_info(f"Generated SQL: {sql_query}", tenant_id, conversation_id)
 
             # Step 2: Execute the query with Pandas
-            from sqlalchemy import create_engine
+            
             engine = create_engine(db_uri)
             df = pd.read_sql_query(sql_query, con=engine)
             
@@ -1561,7 +1575,7 @@ def trim_messages(state: AgentState, runtime: Runtime) -> dict[str, Any] | None:
     messages = state["messages"]
     
     # 1. Trim base64 content from all messages to save memory/context
-    import re
+    
     base64_pattern = r"data:image\/.*?;base64,[a-zA-Z0-9+/=]{100,}"
     
     modified = False

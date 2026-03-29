@@ -10,6 +10,18 @@ import logging
 import re
 import io
 import requests
+
+import os
+import shutil
+import logging
+import json
+import traceback
+import re
+import traceback
+import json
+import json
+import re
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Union, Annotated, cast
 from PIL import Image
@@ -523,10 +535,6 @@ def get_embeddings():
 
  
 
-import os
-import shutil
-import logging
-
 def ingest_pdf_for_tenant(tenant_id: str, file_path: str):
     """
     Load a PDF, split into chunks, create a FAISS index.
@@ -687,7 +695,7 @@ def should_continue(state: State) -> Literal["tool_node", "__end__"]:
         parsed = last_message.additional_kwargs["parsed_json"]
     else:
         # Try parsing from content if missing
-        import json
+        
         try:
             if last_message:
                 content_str = last_message.content if isinstance(last_message.content, str) else str(getattr(last_message, "content", ""))
@@ -775,7 +783,7 @@ def tool_node(state: State) -> dict:
 
     except Exception as e:
         log_error(f"Critical failure in tool_node: {str(e)}", tenant_id, conversation_id)
-        import traceback
+       
         log_error(traceback.format_exc(), tenant_id, conversation_id)
         return {"messages": [ToolMessage(content=f"Error executing tool: {e}", tool_call_id="error", name="error_handler")]}
 
@@ -882,7 +890,7 @@ def normalize_tool_calls(response):
     
     # 2. Iterate through content to find and parse multiple JSON objects
     # Attempt a regex extraction first to handle common LLM formatting issues like trailing quotes
-    import re
+   
     # Match everything between the first '{' and last '}'
     match = re.search(r"(\{.*\})", content, re.DOTALL)
     if match:
@@ -1096,7 +1104,7 @@ def assistant_node(state: State, config: RunnableConfig):
         
         log_info(f"LLM Raw Output: {response}", tenant_id, conversation_id)
     except BaseException as e:
-        import traceback
+        
         log_error(f"CRITICAL CRASH in assistant_node: {e}\n{traceback.format_exc()}", tenant_id, conversation_id)
         raise e
     refined_response = normalize_tool_calls(response)
@@ -1298,7 +1306,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
         for msg in reversed(messages):
             if hasattr(msg, "name") and msg.name == "generate_visualization_tool":
                 try:
-                    import json
+                    
                     tool_content = json.loads(msg.content)
                     viz_res = tool_content.get("visualization_result", {})
                     viz_from_tool["image"] = viz_res.get("image_base64")
@@ -1308,8 +1316,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
                 except Exception as e:
                     logger.error(f"Failed to parse visualization tool content: {e}")
         if last_msg:
-            import json
-            import re
+            
             content_raw = last_msg.content if hasattr(last_msg, "content") else str(last_msg)
             content_clean = re.sub(r"^```json\s*|\s*```$", "", content_raw.strip(), flags=re.MULTILINE)
             try:
@@ -1345,7 +1352,7 @@ def process_message(message_content: str, conversation_id: str, tenant_id: str, 
                 result_data["text"] += "\n\n" + result_data["viz_analysis"]
                 
             # Filter out base64 image data from text response
-            import re
+            
             base64_pattern = r"!\[.*?\]\(data:image\/.*?;base64,.*?\)|data:image\/.*?;base64,[a-zA-Z0-9+/=]+"
             result_data["text"] = re.sub(base64_pattern, "[Image Visualization]", result_data["text"])
 

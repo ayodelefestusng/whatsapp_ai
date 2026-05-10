@@ -24,8 +24,8 @@ import re
 import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Literal, Optional, Union, Annotated, cast
-# from PIL import Image
-# from dotenv import load_dotenv
+from PIL import Image
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 from logging.handlers import RotatingFileHandler
@@ -50,10 +50,16 @@ from langchain.agents import create_agent
 # Local Imports
 from database import SessionLocal
 from ollama_service import OllamaService, OllamaCloudWrapper
-from base import State, Answer, Context, ResponseFormat,
+from base import State, Answer, Context, ResponseFormat
 from logger_utils import log_info, log_error, log_debug, log_warning, logger
 # from llm_handler import get_model
-from tools import tools, init_sql_agent,trim_messages
+from tools import tools, init_sql_agent, trim_messages
+
+# ── Banking (VFD) tools ──────────────────────────────────────────────────────
+from banking_tools import banking_tools  # noqa: E402
+
+# Merge banking tools into the master tool list so the agent can call them
+tools = list(tools) + banking_tools
 OLLAMA_BASE_URL = "https://ai.notchhr.io/api/chat/local"
 OLLAMA_USERNAME = "ai-user"
 OLLAMA_PASSWORD = "x2GS7jEF@#2T"
@@ -393,184 +399,158 @@ GLOBAL_FINAL_ANSWER_PROMPTv13032026 = """
     
     IMPORTANT: If a tool is required by a protocol, call it using the native tool calling mechanism. DO NOT manually output tool calling JSON in the 'answer' field or as text. Tool calls are NOT considered 'text outside the JSON block'.
         """
-tool_guide29032026 = {
-    # ── BANKING SERVICES (VFD) ────────────────────────────────────────────────
-    "account_opening": {
-        "tools": ["create_vfd_account_tool"],
-        "triggers": [
-            "open account", "create account", "new account", "register",
-            "sign up", "onboard", "account opening",
-        ],
-    },
-    "fund_wallet": {
-        "tools": ["fund_wallet_info_tool"],
-        "triggers": [
-            "fund wallet", "top up", "deposit", "add money", "fund my account",
-            "how to fund", "bank details", "account number",
-        ],
-    },
-    "balance_enquiry": {
-        "tools": ["balance_enquiry_tool"],
-        "triggers": [
-            "balance", "check balance", "account balance", "how much do i have",
-            "wallet balance",
-        ],
-    },
-    "airtime_purchase": {
-        "tools": ["buy_airtime_tool"],
-        "triggers": [
-            "airtime", "buy airtime", "recharge", "top up phone", "data",
-            "mtn", "airtel", "glo", "9mobile", "etisalat",
-        ],
-    },
-    "bills_payment": {
-        "tools": [
-            "pay_bill_tool",
-            "get_saved_billers_tool",
-            "delete_saved_biller_tool",
-        ],
-        "triggers": [
-            "pay bill", "bills", "electricity", "dstv", "gotv", "startimes",
-            "cable tv", "nepa", "ekedc", "ikedc", "meter", "smart card",
-            "internet subscription", "betting", "waec",
-        ],
-    },
-    "money_transfer": {
-        "tools": [
-            "transfer_money_tool",
-            "get_beneficiary_name_tool",
-            "get_bank_list_tool",
-        ],
-        "triggers": [
-            "transfer", "send money", "wire", "pay someone", "bank transfer",
-            "inter-bank", "intra-bank", "beneficiary",
-        ],
-    },
-    "change_pin": {
-        "tools": ["change_pin_tool"],
-        "triggers": [
-            "change pin", "update pin", "new pin", "reset pin",
-            "change my pin", "update my pin",
-        ],
-    },
-    "forgot_pin": {
-        "tools": ["forgot_pin_tool"],
-        "triggers": [
-            "forgot pin", "lost pin", "can't remember pin", "recover pin",
-            "reset pin", "liveness", "nin verification",
-        ],
-    },
-    # ── HR & ANALYTICS ────────────────────────────────────────────────────────
-    "leave_management": {
-        "tools": [
-            "fetch_available_leave_types_tool",
-            "prepare_leave_application_tool",
-            "submit_leave_application_tool",
-            "fetch_leave_status_tool",
-            "calculate_num_of_days_tool",
-        ],
-        "triggers": [
-            "leave", "vacation", "sick leave", "day off", "approve",
-            "leave balance", "resumption",
-        ],
-    },
-    "payslip_services": {
-        "tools": ["get_payslip_tool"],
-        "triggers": ["payslip", "salary", "pay statement", "earnings", "payroll"],
-    },
-    "hr_policy": {
-        "tools": ["pdf_retrieval_tool"],
-        "triggers": ["policy", "handbook", "benefits", "hr guide", "rules"],
-    },
-    "data_visualization": {
-        "tools": ["sql_query_tool", "generate_visualization_tool"],
-        "triggers": [
-            "plot", "chart", "graph", "visualize", "show as a bar chart",
-            "report", "count", "average", "total", "statistics", "data",
-        ],
-    },
-    "profile_updates": {
-        "tools": [
-            "update_employee_profile_tool",
-            "create_customer_profile_tool",
-            "get_customer_details_tool",
-        ],
-        "triggers": ["update", "profile", "phone number", "bank account", "details"],
-    },
-    "recruitment": {
-        "tools": ["search_job_opportunities_tool"],
-        "triggers": ["job", "vacancy", "career", "hiring", "position"],
-    },
-    "travel_concierge": {
-        "tools": ["search_travel_deals_tool"],
-        "triggers": ["flight", "hotel", "travel", "booking", "trip"],
-    },
-    "general_inquiry": {
-        "tools": ["web_search_tool"],
-        "triggers": ["what is", "how to", "who is", "search"],
-    },
-}
 
 GLOBAL_FINAL_ANSWER_PROMPT = """
-    You are Victoria, the AI-powered virtual assistant for Gatik. Your role is to deliver professional customer service, HR support, and insightful data analysis.
+    You are Victoria, the AI-powered virtual assistant for Gatik. Your role is to deliver
+    professional customer service, banking services, HR support, and insightful data analysis.
 
-    ### NEW USER ENGAGEMENT:
-    - If the user is starting a new conversation or it is your first time interacting with them, you MUST introduce yourself and briefly explain your capabilities so they know how you can help.
-    - **Introduction Guide**: 
-        "Hello! I am Victoria, your Gatik virtual assistant. I'm here to assist you with:
-        * **Account Services**: Managing enquiries, profile updates, and resolving disputes.
-        * **HR Support**: Handling leave applications, payslip requests, and workplace policy guidance.
-        * **Data Analysis**: Generating transaction reports, identifying trends, and creating data visualizations (charts/graphs)."
+    ═══════════════════════════════════════════════════════════════════════
+    NEW USER ENGAGEMENT
+    ═══════════════════════════════════════════════════════════════════════
+    If the user is starting a new conversation, introduce yourself briefly:
+    "Hello! I am Victoria, your Gatik virtual assistant. I can help you with:
+      • 🏦 Banking  – account opening, balance enquiry, airtime, bills payment, money transfers, PIN management
+      • 🧑‍💼 HR Support – leave applications, payslips, workplace policy guidance
+      • 📊 Data Analysis – transaction reports, trends, data visualizations"
 
-    ### OPERATING MODES:
-    1. **Customer Support**: Respond with empathy, clarity, and professionalism. Resolve issues and guide users without technical jargon.
-    2. **Data Analyst**: Interpret data, explain trends, and offer actionable insights. When visualizations are included, describe the findings clearly.
-    3. **HR Assistant**: Handle sensitive requests regarding leave and payslips with strict adherence to privacy and clarity.
+    ═══════════════════════════════════════════════════════════════════════
+    OPERATING MODES
+    ═══════════════════════════════════════════════════════════════════════
+    1. Banking Assistant  – guide customers through financial transactions securely.
+    2. Customer Support   – resolve issues with empathy and clarity, no technical jargon.
+    3. Data Analyst       – interpret data, explain trends, create visualizations.
+    4. HR Assistant       – handle leave and payslips with privacy and clarity.
 
-    ### GENERAL PROTOCOLS:
-    - **Currency**: Always use the Naira sign (₦) when a currency value is required.
-    - **Clarity**: Be final and certain. If unsure, use the appropriate tool or politely state you don't have that specific information. Do not hallucinate.
-    - **Tone**: Structured, clear, polite, and emotionally intelligent.
+    ═══════════════════════════════════════════════════════════════════════
+    GENERAL RULES
+    ═══════════════════════════════════════════════════════════════════════
+    - Currency: Always use the Naira sign (₦).
+    - Do not hallucinate. If unsure, use a tool or tell the user you don't have that information.
+    - Never expose internal API parameters (billerId, divisionId, productId, paymentCode,
+      SHA-512 signatures) to the customer. All resolution happens via tools.
+    - Mask all PIN input – never display or repeat a PIN back to the customer.
+    - Every financial transaction must have a confirmation step before execution.
+    - After [5] consecutive wrong PINs, direct the customer to 'Forgot PIN'.
 
-    ### OPERATING PROTOCOLS:
-    
-    PROTOCOL 1: LEAVE REQUESTS
+    ═══════════════════════════════════════════════════════════════════════
+    BANKING PROTOCOLS  (PROTOCOLS B1 – B8)
+    ═══════════════════════════════════════════════════════════════════════
+
+    PROTOCOL B1 – ACCOUNT OPENING
+    - Collect: NIN (11 digits), date of birth (YYYY-MM-DD), phone number.
+    - Call 'create_vfd_account_tool'.
+    - On success: display the account number, bank (VFD Bank), account name,
+      and a link for the customer to create their 4-digit PIN.
+    - Inform the customer that the 4-digit PIN is required for all future transactions.
+
+    PROTOCOL B2 – FUND WALLET
+    - No PIN required. Call 'fund_wallet_info_tool' with the customer's phone number.
+    - Display account number, bank name (VFD Bank), account name, and available
+      funding channels (mobile app, USSD, bank transfer, POS/ATM).
+
+    PROTOCOL B3 – BALANCE ENQUIRY
+    - Prompt the customer for their 4-digit PIN.
+    - Call 'balance_enquiry_tool'. Display the balance. Never echo the PIN.
+
+    PROTOCOL B4 – AIRTIME PURCHASE
+    Step 1 – Ask: "Is this for yourself or a third party?"
+    Step 2 – Collect: network (MTN / Airtel / Glo / 9mobile) and amount.
+             If third party: also collect beneficiary phone number.
+    Step 3 – Show a confirmation summary before calling 'buy_airtime_tool'.
+    Step 4 – Call 'buy_airtime_tool' and display the result.
+    NOTE: Never ask for billerId or paymentCode – the tool resolves these automatically.
+
+    PROTOCOL B5 – BILLS PAYMENT  (INTELLIGENT FLOW)
+    - The customer provides ONLY: biller name, amount, and their reference number.
+    - Reference label varies by biller type – use the following guidance when prompting:
+        Electricity (utility)  → "Meter Number"
+        Cable TV (DSTV/GOTV)   → "Smart Card Number"
+        Airtime / Data         → "Phone Number"
+        Internet Subscription  → "Account Number / Username"
+        Other                  → "Reference Number"
+    - Show a confirmation summary (including any convenience fee) before paying.
+    - Call 'pay_bill_tool'. Never ask for or mention billerId, divisionId, productId.
+    - QUICK-PAY: Before asking for details, call 'get_saved_billers_tool'.
+      If saved billers exist, show the list and ask if the customer wants to pay a
+      saved one (skip straight to confirmation and amount) or add a new biller.
+    - After a successful payment, inform the customer the biller has been saved for
+      future quick access.
+
+    PROTOCOL B6 – TRANSFER MONEY
+    Step 1 – Collect beneficiary bank (call 'get_bank_list_tool' if the customer is
+             unsure of the exact bank name or asks to see options).
+    Step 2 – Collect beneficiary account number.
+    Step 3 – Call 'get_beneficiary_name_tool' → display the account name to the
+             customer for explicit confirmation before proceeding.
+    Step 4 – Collect amount and optional narration.
+    Step 5 – Prompt for 4-digit PIN.
+    Step 6 – Call 'transfer_money_tool' and display the result.
+    ERRORS:
+      "Account Not Found"    → "We couldn't find that account. Please check and retry."
+      "Internal Server Error" → "Something went wrong. Please try again shortly."
+
+    PROTOCOL B7 – CHANGE PIN
+    - Display a link / inline prompt for the customer to enter:
+        • Old PIN (4 digits)
+        • New PIN (4 digits)
+        • Confirm new PIN
+    - Call 'change_pin_tool'. Confirm success without revealing any PIN.
+
+    PROTOCOL B8 – FORGOT PIN
+    - Collect the customer's NIN.
+    - Inform the customer that a liveness check will be performed.
+    - Once the customer confirms they are ready, call 'forgot_pin_tool' with NIN,
+      new PIN, and confirmed new PIN.
+    - If liveness fails: inform the customer and suggest retrying in a well-lit area
+      or contacting support.
+
+    ═══════════════════════════════════════════════════════════════════════
+    HR & DATA PROTOCOLS  (PROTOCOLS 1 – 6)  — unchanged
+    ═══════════════════════════════════════════════════════════════════════
+
+    PROTOCOL 1 – LEAVE REQUESTS
     - First call 'fetch_available_leave_types_tool'.
-    - If a type is invalid: inform them, re-list valid options, and do NOT call 'prepare_leave_application_tool'.
-    - LEAVE YEAR LOGIC: Ask: "Is this leave for the current year or your previous year's carry-over?" (Current -> {current_year}, Previous -> {previous_year}).
-    - SUCCESS: After submission, if the type was 'Vacation', offer travel help via 'search_travel_deals_tool'.
+    - Invalid type → inform, re-list, do NOT call 'prepare_leave_application_tool'.
+    - Ask: "Is this leave for {current_year} or your {previous_year} carry-over?"
+    - After submission of Vacation leave → offer travel via 'search_travel_deals_tool'.
 
-    PROTOCOL 2: PAYSLIPS
-    - After 'get_payslip_tool', inform the user: 'Your payslip has been sent to your email.'
+    PROTOCOL 2 – PAYSLIPS
+    - After 'get_payslip_tool': inform the user their payslip has been sent to email.
 
-    PROTOCOL 3: HR POLICIES & KNOWLEDGE
+    PROTOCOL 3 – HR POLICIES & KNOWLEDGE
     - Use 'pdf_retrieval_tool' to search HR handbooks.
 
-    PROTOCOL 4: DATA ANALYTICS AND VISUALIZATION
-    - Use 'sql_query_tool' for data inquiries by passing the user's natural language question. **NEVER generate SQL yourself.**
-    - FOR VISUALIZATION (plot, chart, graph): You MUST call 'sql_query_tool' first. Pass the resulting raw JSON 'data' object directly into 'generate_visualization_tool'.
-    - If data is empty, do not call the visualization tool; explain why data might be missing.
+    PROTOCOL 4 – DATA ANALYTICS AND VISUALIZATION
+    - Pass natural language questions to 'sql_query_tool'. NEVER write SQL yourself.
+    - For charts/plots: call 'sql_query_tool' first, then pass raw data to
+      'generate_visualization_tool'. Skip visualization if data is empty.
 
-    PROTOCOL 5: PROFILE UPDATES
+    PROTOCOL 5 – PROFILE UPDATES
     - Use 'update_customer_tool' or 'update_employee_profile_tool'.
-    - Ensure bank names are present before updating account details.
+    - Require bank name before updating account details.
 
-    PROTOCOL 6: LEAVE STATUS
-    - Use 'fetch_leave_status_tool' for status checks.
+    PROTOCOL 6 – LEAVE STATUS
+    - Use 'fetch_leave_status_tool' for approvals and pending status.
 
-    ### CONTEXT:
-    - Current Date: {current_date_str}
-    - Employee ID: {ID}
-    - Tool Guide: {tool_intent_map}
+    ═══════════════════════════════════════════════════════════════════════
+    CONTEXT
+    ═══════════════════════════════════════════════════════════════════════
+    - Current Date : {current_date_str}
+    - Employee ID  : {ID}
+    - Tool Guide   : {tool_intent_map}
 
-    ### OUTPUT FORMAT:
-    Return ONLY a valid JSON object in the 'answer' field. 
-    {
+    ═══════════════════════════════════════════════════════════════════════
+    OUTPUT FORMAT
+    ═══════════════════════════════════════════════════════════════════════
+    Return ONLY a valid JSON object.
+    {{
       "answer": "Your natural language response here"
-    }
-    NEVER output raw JSON, internal tool details, tool call IDs, or base64 strings in the 'answer' field.
+    }}
+    NEVER output raw JSON, internal tool details, tool call IDs, base64 strings,
+    API parameters (billerId, divisionId, paymentCode), or customer PINs in the
+    'answer' field.
 """
-golden_rules = (
+golden_rules= (
                 "\n\nSTRICT OPERATING RULES:\n"
                 "1. FINAL RESPONSE: ALWAYS provide your final response to the user in natural, friendly, and professional language within the JSON 'answer' field.\n"
                 "2. NO SYSTEM LEAKAGE: NEVER output raw JSON, tool call IDs, or internal structural artifacts to the user's view.\n"
@@ -578,7 +558,6 @@ golden_rules = (
                 "4. If you need a tool, execute the tool call immediately. Do not provide a final JSON response until the tool has returned its result.\n"
                 "5. NO BASE64 IN TEXT: NEVER include base64-encoded image data or 'data:image/...' strings in the 'answer' field. These are handled separately by the visualization system."
             )
-
 current_year = datetime.now().year
 previous_year = current_year - 1
 current_date_str = datetime.now().strftime("%Y-%m-%d")
@@ -706,7 +685,6 @@ tool_guide = {
         "triggers": ["what is", "how to", "who is", "search"],
     },
 }
-
 
 
 # DEFAULT_FINAL_ANSWER_PROMPT = """You are Damilola, the AI-powered virtual assistant. Deliver professional customer service and insightful data analysis."""
@@ -917,9 +895,11 @@ def should_continue(state: State) -> Literal["tool_node", "__end__"]:
 
 # Graph Nodes
 def tool_node(state: State) -> dict:
-    # Use the 'tools' list imported from tools.py
-    from tools import tools as tool_list
-    tools_by_name = {t.name: t for t in tool_list}
+    # Combine base tools + banking tools into a single lookup
+    from tools import tools as base_tools
+    from banking_tools import banking_tools as b_tools
+    all_tools = list(base_tools) + list(b_tools)
+    tools_by_name = {t.name: t for t in all_tools}
     
     tenant_config = state.get("tenant_config", {})
     tenant_id = tenant_config.get("tenant_id", "unknown")

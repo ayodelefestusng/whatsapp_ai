@@ -1,0 +1,302 @@
+Procedure for Account Opening with nin 
+import token
+
+import requests, hashlib
+
+
+BASE_URL = "https://api-devapps.vfdbank.systems/vtech-wallet/api/v2/wallet2"
+yourConsumerKey="mL1dqaMcB760EP3fR18Vc23qUSZy"
+yourConsumerSecret="ohAWPpabbj0UmMppmOgAFTazkjQt"
+
+
+def get_access_token():
+    url = "https://api-devapps.vfdbank.systems/vfd-tech/baas-portal/v1.1/baasauth/token"
+    payload = {
+        "consumerKey": yourConsumerKey,
+        "consumerSecret": yourConsumerSecret,
+        "validityTime": "-1"
+    }
+    headers = {"Content-Type": "application/json"}
+    response = requests.post(url, json=payload, headers=headers)
+    data = response.json()
+    if data.get("status") == "00":
+        return data["data"]["access_token"]
+    else:
+        raise Exception(f"Failed to get token: {data}")
+
+token = get_access_token()
+print("Access Token:", token)
+
+
+def create_account_with_nin(token, nin, dob):
+    url = BASE_URL + f"/client/tiers/individual?nin={nin}&dateOfBirth={dob}"
+    headers = {"AccessToken": token, "Content-Type": "application/json"}
+    response = requests.post(url, headers=headers, json={})
+    print("Request URL:", url)
+    print("Request Headers:", headers)
+    print("HTTP Status:", response.status_code)
+    print("Raw Response:", response.json())
+    return response.json()
+
+if __name__ == "__main__":
+    token = get_access_token()
+    print("Access Token:", token)
+
+    # Example NIN and DOB (must be valid test data)
+    # nin = "12345678901"
+    # dob = "2002-01-20"
+    nin = "23230042941"
+    # dob = "08-Mar-1995"
+    dob = "1994-04-05"
+
+    account_response = create_account_with_nin(token, nin, dob)
+    print("Account Creation Response:", account_response)
+
+
+
+See below for Tranfer 
+FOR Transfer . See the procedure
+
+Transfer Services
+1. Account Enquiry
+API Context: /account/enquiry?accountNumber={accountNumber}
+
+This endpoint is used to get account details of a transfer sender. When accountNumber is not passed the pool account details is returned.
+
+API METHOD: GET
+
+2. Beneficiary Enquiry
+API Context: /transfer/recipient?accountNo={accountNo}&bank={bank}&transfer_type={transfer_type}
+
+This endpoint is used to get a transfer recipient account details
+
+API METHOD: GET
+
+Sample Failed Responses
+
+Account Not Found: This occurs when the specified account does not exist.
+Ensure you validate the account number and retry the request.
+{ "status":"104","message":"Account Not Found"}
+Internal Server Error: This occurs when there is a server-side error.
+Kindly retry the request. If the issue persists, escalate to support.
+ { "status":"500","message":"Internal Server Error"}
+
+3. Bank List
+API Context: /bank
+
+Description: This endpoint is used to fetch the list of all nigerian banks and bank codes
+
+API METHOD: GET
+
+4. Transfer
+API Context : /transfer
+
+Description: This endpoint performs funds transfer(withdrawals)
+
+API METHOD: POST
+
+HOW TO MAKE A TRANSFER
+
+During Transfer the first process is to call the account enquiry API (a) to get the From details for the transfer payload.
+
+The second process is to call the bank list API to get the bank codes.
+
+The third process is to call the transfer recipient endpoint (b) to get the beneficiary or ‘’TO’’ details.
+
+The fourth process is to generate the signature using SHA512(fromAccount ToAccount). The accounts should be concatenated together. There is a table below that shows how to populate the transfer payload
+
+Sample Response Inter
+{
+    "status": "00",
+    "message": "Successful Transfer",
+    "data": {
+        "txnId": "TestWallet-AWW3WDIUWU4U",
+        "sessionId": "090110220420225737701409365803",
+        "reference": "1650491857685"
+    }
+}
+
+6. Transaction Status Query (TSQ)
+API Context:
+
+Search By Reference: /transactions?reference={reference}
+
+Search By SessionId: /transactions?sessionId={sessionId}
+
+Description: This endpoint is used to query the status of a transaction by providing either the transaction reference or sessionId.
+
+API METHOD: GET
+
+
+For Bill Payment 
+
+3.0 BASE URL
+All requests to the Bills Payment API must be done using the web API URL below.
+
+Test Environment: https://api-devapps.vfdbank.systems/vtech-bills/api/v2/billspaymentstore
+
+3.0 HOW TO USE THE APIS
+Below are the steps involved to make a bill payment
+
+The developer first calls the BILLER CATEGORY endpoint and gets a list of biller categories
+The developer then calls the BILLER LIST endpoint and passes a category name returned from BILLER CATEGORY to get all the billers for the category
+The developer then calls the BILLER ITEMS to get the biller items for a biller returned from BILLER LIST
+The developer can then call CUSTOMER VALIDATE to verify the customerId input that would be used in the PAY endpoint. Note this is mandatory for the utility and cable TV services and should be done in the live environment.
+The developer then calls the PAY endpoint to make the bill payment as stated in the docs using the information returned from BILLER LIST and BILLER ITEMS
+The developer can then call the TRANSACTION STATUS endpoint to check the payment status
+
+3.1 BILLER CATEGORY
+API Context : /billercategory
+SAMPLE RESPONSE
+{
+    "status": "00",
+    "message": "Successfully Returned Biller Category",
+    "data": [
+        {"category": "Airtime"},
+        {"category": "Cable TV"},
+        {"category": "Data"},
+        {"category": "Internet Subscription"},
+        {"category": "Utility"},
+    ],
+
+3.2 BILLER LIST
+API Context : /billerlist?categoryName={categoryName}
+API METHOD: GET
+QUERY PARAMETERS
+
+Field	Description	Status
+categoryName	This allows you fetch list of billers based on a category. If not passed, billers for all categories are returned	Optional
+
+Description: This endpoint returns a list of billers for a particular category
+}
+SAMPLE RESPONSE
+{"status": "00",
+    "message": "Succesfully Returned Biller list",
+    "data": [
+        {"id": "airng","name": "AIRTEL","division": "C","product": "423", "category": "Airtime"},
+        {"id": "eting","name": "9MOBILE","division": "C","product": "422","category": "AIRTIME", "convenienceFee":"30"},
+            { "id": "glong","name": "GLO",
+            "division": "C",
+            "product": "424",
+            "category": "AIRTIME"},
+        { "id": "GLO_VBANK",
+            "name": "GLO",
+            "division": "G",
+            "product": "424",
+            "category": "AIRTIME",
+            "convenienceFee":"30"}]}
+
+3.3 BILLER ITEMS
+API Context : /billerItems?billerId={billerId}&divisionId={divisionId}&productId={productId}
+Description: This endpoint returns all items under a biller
+API METHOD: GET
+
+QUERY PARAMETERS
+
+Field	Value	Description	Status	
+billerId	airng	This is returned from biller List	Mandatory	
+divisionId	C	This is returned from biller List	Mandatory	
+productId	423	This is returned from biller List	Mandatory	
+
+SAMPLE RESPONSE
+
+{
+    "status": "00",
+    "message": "Succesfully Returned Biller Items",
+    "data": {
+        "paymentitems": [
+            {
+                "id": "5",
+                "billerid": "airng",
+                "amount": "0",
+                "code": "2",
+                "paymentitemname": "AIRNG",
+                "productId": "423",
+                "paymentitemid": "423",
+                "currencySymbol": "NGN",
+                "isAmountFixed": "false",
+                "itemFee": "0",
+                "itemCurrencySymbol": "NGN",
+                "pictureId": "87",
+                "paymentCode": "airng",
+                "sortOrder": "4",
+                "billerType": "MO",
+                "payDirectitemCode": "airng",
+                "currencyCode": "566",
+                "division": "C",
+                "categoryid": "3",
+                "createdDate": "2022-10-18 10:11:43"
+            }] }}
+
+3.4 VALIDATE CUSTOMER
+API Context : /customervalidate?divisionId={divisionId}&paymentItem={paymentItem}&customerId={customerId}&billerId={billerId}
+Description: This endpoint allows you validate the customerId input field e.g meter number before making the bill payment
+info
+For data and airtime products, the validate customer field is optional and can be by-passed. However, for utility, cable TV services, betting and gaming the customerId validation is required before making a payment.
+API METHOD: GET
+
+REQUEST HEADERS
+Query Parameters	Description	Required
+customerId	Customer Id e.g Meter Number	Mandatory
+divisionId	This is returned from biller List as division	Mandatory
+paymentItem	This is returned from biller items as paymentCode	Mandatory
+billerId	This signifies the ID of the biller it is returned from the Biller List	Mandatory
+SAMPLE SUCCESS RESPONSE
+{ 
+  "status":"00",
+  "message":"Successfully validated customer",
+  "data":{}
+ }
+
+3.5 PAY BILLS
+API Context : /pay
+
+Description: This endpoint is used to initiate a bill payment
+
+API METHOD: POST
+SAMPLE REQUEST
+{
+    "customerId": "09071046909",
+    "amount": "2150",
+    "division": "C",
+    "paymentItem": "dstv",
+    "productId": "399",
+    "billerId": "dstv",
+    "reference": "rosapay-1234",
+    "phoneNumber":"09000000000"
+}
+
+Field	Description	Status	
+customerId	This allows you to enter the customer Id, e.g Phone Number or Meter Number	Mandatory	
+amount	bill cost	Mandatory	
+division	This is returned from biller List	Mandatory	
+paymentItem	This is returned from biller items as paymentCode	Mandatory	
+productId	This is returned from biller List	Mandatory	
+billerId	This signifies the ID of the biller it is returned from the Biller List	Mandatory	
+reference	This signifies a unique reference to identify transactions and must be pre-fixed with walletName or name of choice e.g rosapay-1234	Mandatory	
+phoneNumber	Customer Phone Number	Not Mandatory
+
+SAMPLE RESPONSE
+{
+    "status": "00",
+    "message": "Successful payment",
+    "data": {
+        "reference": "rosapay-1234"
+    }
+}
+3.6 TRANSACTION STATUS
+API Context : /transactionStatus?transactionId={transactionId}
+
+Description: This endpoint returns the status of a transaction
+
+API METHOD: GET
+
+REQUEST HEADERS
+Sample Response
+{
+    "status": "00",
+    "message": "Successful Transaction Retrieval",
+    "data": {
+        "transactionStatus": "00",
+        "amount": "500",
+        "token": "" }}

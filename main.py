@@ -522,3 +522,32 @@ def send_media_messagev1(number: str, base64_image: str, caption: str):
     }
     log_info(f"Sending media message to {number}. Payload keys: {payload.keys()}", "system", "system")
     return requests.post(url, json=payload, headers=headers)
+
+
+
+
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+import logging
+
+# Log to a file so you can check it via SSH or Easypanel logs
+logging.basicConfig(
+    filename="power_monitor.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+app = FastAPI()
+
+class PowerStatus(BaseModel):
+    status: str
+
+@app.post("/api/power/")
+async def power_update(data: PowerStatus, request: Request):
+    # Log the exact time and status
+    status_msg = f"Grid Status: {data.status.upper()} | Source: {request.client.host}"
+    logger.info(status_msg)
+    print(status_msg) # Visible in Easypanel container logs
+    
+    return {"status": "received", "update": data.status}
